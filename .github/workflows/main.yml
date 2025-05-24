@@ -41,7 +41,7 @@ jobs:
           args: build --rm-dist --snapshot
 
       - name: Upload assets
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pinentry-touchid
           path: dist/*
