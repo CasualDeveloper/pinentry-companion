@@ -70,43 +70,15 @@ following command to automatically fix the symlink.
 $ pinentry-touchid -fix
 ```
 
-### Homebrew
-
-
-As part of our release process we keep an updated Homebrew Formula. To install `pinentry-touchid` using
-Homebrew execute the following commands:
-
-```sh
-$ brew tap jorgelbg/tap
-$ brew install pinentry-touchid
-```
-
-Homebrew will print the next steps, which will look similar to:
-
-```
-==> Caveats
-➡️  Ensure that pinentry-mac is the default pinentry program:
-      /usr/local/bin/pinentry-touchid -fix
-
-✅ Add the following line to your ~/.gnupg/gpg-agent.conf file:
-      pinentry-program /usr/local/opt/pinentry-touchid/bin/pinentry-touchid
-
-🔄  Then reload your gpg-agent:
-      gpg-connect-agent reloadagent /bye
-
-🔑  Run the following command to disable "Save in Keychain" in pinentry-mac:
-    defaults write org.gpgtools.common DisableKeychain -bool yes
-
-⛔️  If you are upgrading from a previous version, you will be asked to give
-    access again to the keychain entry. Click "Always Allow" after the
-    Touch ID verification to prevent this dialog from showing.
-==> Summary
-🍺  /usr/local/Cellar/pinentry-touchid/0.0.2: 4 files, 2.2MB, built in 10 seconds
-```
-
 ### Manual installation
 
-- Download the `pinentry-touchid` binary from our Releases page
+- Build the project, and move the binary to somewhere you like, if you want:
+
+```sh
+$ git clone https://github.com/ikitsuchi/pinentry-touchid.git && cd pinentry-touchid
+$ go build
+$ mv pinentry-touchid /usr/local/bin/
+```
 
 - Configure the `gpg-agent` to use `pinentry-touchid` as its pinentry program. Add or replace the
   following line to your gpg agent configuration in: `~/.gnupg/gpg-agent.conf`:
@@ -128,6 +100,8 @@ If any error is reported `pinentry-touchid` can automatically fix the symlink fo
 ```sh
 $ pinentry-touchid -fix
 ```
+
+Weiyi: Here the program is ready to use, the following steps are not required.
 
 ## Manually add your GPG key password to the Keychain
 

@@ -19,18 +19,19 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/enescakir/emoji"
 	"github.com/foxcpp/go-assuan/common"
 	"github.com/foxcpp/go-assuan/pinentry"
 	pinentryBinary "github.com/gopasspw/pinentry"
-	"github.com/jorgelbg/pinentry-touchid/sensor"
+	touchid "github.com/ikitsuchi/go-touchid"
 	"github.com/keybase/go-keychain"
 )
 
 // AuthFunc is a function that runs some check to verify if the caller has access to the Keychain
 // entry
-type AuthFunc func(string) (bool, error)
+type AuthFunc func(string, string, string) (bool, error)
 
 // PromptFunc is a function that asks a password from the user
 type PromptFunc func(pinentry.Settings) ([]byte, error)
@@ -120,7 +121,7 @@ func New() KeychainClient {
 	return KeychainClient{
 		logger:   logger,
 		promptFn: passwordPrompt,
-		authFn:   sensor.Authenticate,
+		authFn:   touchid.Authenticate,
 	}
 }
 
@@ -129,7 +130,7 @@ func WithLogger(logger *log.Logger) KeychainClient {
 	return KeychainClient{
 		logger:   logger,
 		promptFn: passwordPrompt,
-		authFn:   sensor.Authenticate,
+		authFn:   touchid.Authenticate,
 	}
 }
 
@@ -346,22 +347,36 @@ func GetPIN(authFn AuthFunc, promptFn PromptFunc, logger *log.Logger) GetPinFunc
 		}
 
 		var ok bool
-		if ok, err = authFn(fmt.Sprintf("access the PIN for %s", keychainLabel)); err != nil {
-			logger.Printf("Error authenticating with Touch ID: %s", err)
-			return "", assuanError(err)
+		ok, err = authFn(fmt.Sprintf("access the PIN for %s", keychainLabel), "Cancel", "Use Password")
+
+		if ok {
+			password, err := passwordFromKeychain(keychainLabel)
+			if err != nil {
+				log.Printf("Error fetching password from Keychain %s", err)
+			}
+			return password, nil
 		}
 
-		if !ok {
-			logger.Printf("Failed to authenticate")
-			return "", nil
-		}
-
-		password, err := passwordFromKeychain(keychainLabel)
 		if err != nil {
-			log.Printf("Error fetching password from Keychain %s", err)
+			logger.Printf("Error authenticating with Touch ID: %s", err)
+			if err == touchid.ErrUserCancel {
+				return "", assuanError(fmt.Errorf("user canceled authentication"))
+			}
+		} else {
+			logger.Printf("Failed to authenticate")
 		}
 
-		return password, nil
+		pin, err := promptFn(s)
+		if err != nil {
+			logger.Printf("Error calling pinentry program (%s): %s", pinentryBinary.GetBinary(), err)
+		}
+
+		if len(pin) == 0 {
+			logger.Printf("pinentry-mac didn't return a password")
+			return "", assuanError(fmt.Errorf("pinentry-mac didn't return a password"))
+		}
+
+		return string(pin), nil
 	}
 }
 
@@ -418,24 +433,67 @@ func fixPINBinary(oldPath string) error {
 	return nil
 }
 
+// execFallback will replace the running process with the fallback pinentry specified, using the execve(2) syscall.
+//
+// If everything is successful, this function will never return.
+// If something goes wrong, this function will return an error.
+func execFallback(name string) error {
+	fallbackPath, err := exec.LookPath(name)
+	if err != nil {
+		return fmt.Errorf("Unable to find fallback %s: %w", name, err)
+	}
+
+	err = syscall.Exec(fallbackPath, os.Args, os.Environ())
+	if err != nil {
+		return fmt.Errorf("Unable to execute fallback %s: %w", name, err)
+	}
+
+	return nil
+}
+
 func main() {
 	flag.Parse()
-	if !sensor.IsTouchIDAvailable() {
-		client, err := pinentry.LaunchCustom("pinentry-mac")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Pinentry Launch returned error: %v\n", err)
-			os.Exit(-1)
+
+	fallback := ""
+
+	// defer to pinentry_mac if necessary
+	if !touchid.IsTouchIDAvailable() {
+		// fmt.Println("TouchID is unavailable, falling back to pinentry_mac")
+		fallback = "pinentry-mac"
+	}
+
+	env := os.Getenv("PINENTRY_USER_DATA")
+	if strings.Contains(env, "USE_CURSES=1") {
+		// fmt.Println("USE_CURSES is enabled, falling back to pinentry_mac")
+		fallback = "pinentry-curses"
+	}
+
+	if fallback != "" {
+		err := execFallback(fallback)
+		returnErr := &common.Error{
+			Src:     common.ErrSrcPinentry,
+			SrcName: fallback,
+			Code:    common.ErrNoPinEntry,
+			Message: err.Error(),
 		}
+
 		callbacks := pinentry.Callbacks{
-			GetPIN:  client.GetPIN,
-			Confirm: client.Confirm,
-			Msg:     client.Message,
+			Confirm: func(s pinentry.Settings) (bool, *common.Error) {
+				return false, returnErr
+			},
+			GetPIN: func(s pinentry.Settings) (string, *common.Error) {
+				return "", returnErr
+			},
+			Msg: func(s pinentry.Settings) *common.Error {
+				return returnErr
+			},
 		}
 
 		if err := pinentry.Serve(callbacks, "Hi from pinentry-mac!"); err != nil && err != io.EOF {
 			fmt.Fprintf(os.Stderr, "Pinentry Serve returned error: %v\n", err)
-			os.Exit(-1)
 		}
+
+		os.Exit(-1)
 	}
 
 	if *fixSymlink {

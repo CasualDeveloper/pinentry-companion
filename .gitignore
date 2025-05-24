@@ -17,3 +17,11 @@ dist/
 
 # local binary
 pinentry
+pinentry-touchid
+
+# direnv
+.direnv/
+
+# nix
+result
+result-*

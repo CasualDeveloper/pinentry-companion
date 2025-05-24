@@ -25,8 +25,8 @@ created 2021-01-01 (main key ID 70D56DF4CA30DE16).
 )
 
 var (
-	failedAuthFn     = func(reason string) (bool, error) { return false, nil }
-	successfulAuthFn = func(reason string) (bool, error) { return true, nil }
+	failedAuthFn     = func(reason string, cancel_title string, fallback_title string) (bool, error) { return false, nil }
+	successfulAuthFn = func(reason string, cancel_title string, fallback_title string) (bool, error) { return true, nil }
 	dummyPrompt      = func(s pinentry.Settings) ([]byte, error) { return []byte{}, nil }
 )
 
