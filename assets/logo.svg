@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">pinentry-companion logo</title>
+  <desc id="desc">A terminal prompt sends a passphrase line into an interrupted local-presence enclosure.</desc>
+  <g fill="none" stroke="#141412" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M134 203l57 53-57 53" stroke-width="38"/>
+    <path d="M224 182l60-60c16-16 42-16 58 0l61 61c15 15 15 38 0 53" stroke-width="36"/>
+    <path d="M224 330l60 60c16 16 42 16 58 0l61-61c15-15 15-38 0-53" stroke-width="36"/>
+    <path d="M235 256h107" stroke-width="28"/>
+  </g>
+  <circle cx="383" cy="256" r="23" fill="#141412"/>
+</svg>

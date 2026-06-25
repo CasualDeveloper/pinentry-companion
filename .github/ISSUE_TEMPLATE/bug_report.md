@@ -1,48 +1,28 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a problem with pinentry-companion
 title: ''
 labels: bug
 assignees: ''
-
 ---
 
 ## Describe the bug
 
-A clear and concise description of what the bug is.
+What happened? What did you expect instead?
 
 ## System information
 
-**macOS**
- - Architecture: (ARM/M1/Intel)
- - Version: (e.g. 11.6.1)
+- macOS version:
+- Architecture: Apple Silicon / Intel
+- Install method: Homebrew / manual build
+- `pinentry-companion doctor report` output:
 
-**GPG**
- - Output of `gpg --version`
- - Installed via Homebrew?
+## Configuration
 
-**Configuration**
+The doctor report includes the active `pinentry-program` line with home paths redacted. Do not paste full GPG config files unless requested.
 
- - Please attach the output of the command `gpgconf`.
+## Logs
 
-**Logs**
+Do not paste private keys, passphrases, email addresses, or full key fingerprints unless you intentionally want them public.
 
-**`gpg-agent`:**
-
-It would be very useful for us if you could enable the `basic` debug info for your `gpg-agent` and attach the generated log. Add the following to your `~/.gpg-agent.conf`:
-
-```
-debug-level basic
-log-file /Users/<USERNAME>/.gnupg/gpg-agent.log
-```
-
-Reload `gpg-agent` with the following command:
-```sh
-$ gpg-connect-agent reloadagent /bye
-```
-
-Add/attach the relevant section of the log to this issue (feel free to redact your key IDs).
-
-**`pinentry-touchid`:**
-
-`pinentry-touchid` also generates its own log which you can find in `$TMPDIR/pinentry-touchid.log`.
+If relevant, attach redacted `gpg-agent` logs and any relevant output from `/tmp/pinentry-companion.log`.

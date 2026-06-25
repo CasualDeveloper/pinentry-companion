@@ -1,197 +1,143 @@
-# pinentry-touchid
-
 <p align="center">
-    <img class="center" src="https://user-images.githubusercontent.com/1291846/127916161-5803ca98-c0a2-4d1f-8479-860f4d7edc98.png" width="300" alt="pinentry-touchid logo"/>
+  <img src="assets/logo.svg" width="260" alt="pinentry-companion logo">
 </p>
 
-Custom GPG pinentry program for macOS that allows using Touch ID for fetching the password from the
-macOS keychain.
+# pinentry-companion
 
-> Macbook Pro devices without Touch ID are currently not supported. These devices > lack a Touch ID
-> sensor and while the alternative offered by Apple is to use (if available) an Apple Watch, this
-> feature it is not yet implemented.
+Native macOS GPG pinentry with Apple Watch/companion unlock, Touch ID, macOS password fallback, and Keychain-backed passphrase storage.
 
-## See it in action
+`pinentry-companion` is a Swift command-line pinentry program. It speaks the GnuPG pinentry/Assuan protocol over stdin/stdout, stores GPG passphrases in the macOS Keychain, and uses LocalAuthentication to require local device-owner authentication before reading them.
 
- ![pinentry-touchid in action with gopass](https://user-images.githubusercontent.com/1291846/128176593-271ac649-5207-41f2-83da-3fb3d37ede9c.gif)
+## Features
 
+- Native Swift implementation
+- Keychain unlock with Apple Watch/companion support on macOS 15+, plus Touch ID and the macOS account password on supported Macs
+- `pinentry-mac` fallback for first-time passphrase entry and unsupported flows, with `pinentry-curses`/`pinentry-tty` fallback if needed
+- Stale Keychain entry repair when GPG reports a bad passphrase retry
+- Interactive `doctor auth` check for Touch ID/Apple Watch/account-password verification
+- No background daemon, telemetry, network calls, or automatic signing tests
 
-## How does it work
+## Security Model
 
-This program interacts with the `gpg-agent` for providing a password, using the following rules:
+This tool optimizes local convenience for macOS GPG users. It stores the GPG key passphrase in the macOS login Keychain as a `ThisDeviceOnly` item and requires macOS local authentication before reading it.
 
-- If the password entry for the given key cannot be found in the Keychain we fallback to the
-  `pinentry-mac` program to get the password. We recommend preventing `pinentry-mac` from storing the
-  password: uncheck the <kbd>Save in keychain</kbd> checkbox in the dialog.
+On macOS 15 and later, unlock attempts use LocalAuthentication companion/biometry policy where available, allowing supported companion devices such as Apple Watch or Touch ID, with device-owner authentication fallback for the macOS account password. Older macOS versions use device-owner authentication.
 
-- If a password entry is found the user will be shown the Touch ID dialog and upon successful
-  authentication the password stored from the keychain will be returned to the gpg-agent.
+Keychain-enforced companion ACL storage requires a signed build with the required Keychain entitlement. `pinentry-companion doctor` reports whether that ACL is available. When ACL storage is available, new cached entries are stored under an ACL-protected Keychain service and macOS enforces authentication on read. Source/Homebrew builds fall back to the app-level LocalAuthentication gate described above.
 
-- If a password entry is found but is not "owned" by the `pinentry-touchid` program after the
-  successful authentication with Touch ID, a normal password will be shown. This is an extra step
-  enforced by the macOS keychain. In this dialog click <kbd>Always allow</kbd> after entering the
-  password. This will allow `pinentry-touchid` to access the password entry without the need to type
-  the additional password, but still, the access to the password will be guarded by Touch ID.
+That means your GPG passphrase becomes unlockable by macOS local authentication rather than a separately typed GPG passphrase. If you require your GPG passphrase to remain independent from your macOS account credentials, do not use this tool.
 
-## Installation
+`pinentry-companion` never runs a real signing/decryption test by itself. Any live GPG operation must be initiated explicitly by the user.
 
-### Prerequisites
+## Requirements
 
-* [gnupg](https://formulae.brew.sh/formula/gnupg)
-* [pinentry-mac](https://github.com/GPGTools/pinentry-mac)
+- macOS 10.13 or newer
+- GnuPG
+- `pinentry-mac`
+- Swift 6.3 or newer for source builds
 
-
-If you have already installed GPG, make sure that executing `pinentry` shows a GUI prompt by running
-the following command:
+With Homebrew:
 
 ```sh
-$ echo GETPIN | pinentry
+brew install gnupg pinentry-mac
 ```
 
-You should get the dialog from [pinentry-mac](https://github.com/GPGTools/pinentry-mac). If that is not the case you can install it though Homebrew:
+## Build
 
 ```sh
-$ brew install pinentry-mac
+swift build -c release --product pinentry-companion
 ```
 
-You can overwrite the `pinentry` alias to point to `pinentry-mac`:
+The binary is written to:
+
+```text
+.build/release/pinentry-companion
+```
+
+## Install Manually
 
 ```sh
-$ alias pinentry='pinentry-mac'
+install -m 755 .build/release/pinentry-companion "$(brew --prefix)/bin/pinentry-companion"
 ```
 
-_Then try again whether you see a GUI prompt._
+If you are not using Homebrew, install the binary anywhere on your `PATH`.
 
-In some cases aliasing `pinentry` to `pinentry-mac` is not enough because `gpgconf` returns the
-absolute path that points to the `$HOMEBREW_PREFIX/opt` path. In that case you can execute the
-following command to automatically fix the symlink.
+Configure GPG:
 
 ```sh
-$ pinentry-touchid -fix
+pinentry-companion setup
 ```
 
-### Manual installation
-
-- Build the project, and move the binary to somewhere you like, if you want:
+Check the installation:
 
 ```sh
-$ git clone https://github.com/ikitsuchi/pinentry-touchid.git && cd pinentry-touchid
-$ go build
-$ mv pinentry-touchid /usr/local/bin/
+pinentry-companion doctor
 ```
 
-- Configure the `gpg-agent` to use `pinentry-touchid` as its pinentry program. Add or replace the
-  following line to your gpg agent configuration in: `~/.gnupg/gpg-agent.conf`:
+Run an explicit interactive authentication check:
 
 ```sh
-$ pinentry-program /usr/local/bin/pinentry-touchid
+pinentry-companion doctor auth
 ```
 
-You can replace `/usr/local/bin/pinentry-touchid` with the path where the binary was stored.
-
-Make sure that the `pinentry-mac` is configured to be the default `pinentry` program (will be used
-as fallback). You can check which PIN program will be used by default by executing:
+For unattended setup, for example in a bootstrap script:
 
 ```sh
-$ pinentry-touchid -check
+pinentry-companion setup --yes
 ```
 
-If any error is reported `pinentry-touchid` can automatically fix the symlink for you:
-```sh
-$ pinentry-touchid -fix
-```
+## How It Works
 
-Weiyi: Here the program is ready to use, the following steps are not required.
+On `GETPIN`, GnuPG sends prompt metadata including a stable cache identity via `SETKEYINFO`. `pinentry-companion` uses that cache identity as the Keychain account.
 
-## Manually add your GPG key password to the Keychain
+- If no Keychain entry exists, `pinentry-companion` delegates to `pinentry-mac` so the user can enter the passphrase in a native macOS dialog. It then stores the passphrase in the login Keychain.
+- If a signed build can create Keychain ACL items, cached reads are authenticated by the Keychain ACL itself.
+- If ACL storage is unavailable, cached reads are gated by `LocalAuthentication` before reading the stored `ThisDeviceOnly` item.
+- If authorization succeeds, the stored passphrase is returned to `gpg-agent` over the pinentry protocol.
+- If GPG retries with a bad-passphrase error, the stale Keychain entry is deleted and the user is prompted again through `pinentry-mac`.
 
-First, ensure pinentry-mac is already using the Keychain:
+In protocol mode, stdout is reserved for Assuan protocol output. Diagnostics are written to stderr or logs so the Assuan stream is not contaminated.
 
-```sh
-$ security find-generic-password -s 'GnuPG'
-```
-
-You should get a big list of attributes.
-If you get an error, such as the following, it means pinentry-mac is not configured to use the Keychain:
-
-```
-security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.
-```
-
-If you do not see this error, skip ahead to [Configuring pinentry-touchid](#configuring-pinentry-touchid).
-
-### Configuring pinentry-mac
-
-Before configuring pinentry-touchid, you should configure pinentry-mac to use the Keychain at least once:
+## Commands
 
 ```sh
-$ defaults write org.gpgtools.common UseKeychain -bool yes
+pinentry-companion               # run pinentry protocol server on stdin/stdout
+pinentry-companion doctor        # check the local GPG/pinentry setup
+pinentry-companion doctor auth   # run an interactive local-authentication check
+pinentry-companion doctor report # print safe Markdown diagnostics for bug reports
+pinentry-companion setup         # configure GPG to use pinentry-companion
+pinentry-companion help          # show top-level help
 ```
 
-Note that there are two defaults which are the reverse of each other.
-This one, `UseKeychain`, should be set to `yes` or `true`.
+## Protocol Smoke Tests
 
-Ensure the `pinentry-program` entry in your `~/.gnupg/gpg-agent.conf` points to pinentry-mac, then restart the GPG Agent:
+These checks validate the binary and pinentry protocol loop without requiring a GPG key:
 
 ```sh
-$ gpgconf --kill gpg-agent
+swift build -c release --product pinentry-companion
+swift run PinentryCompanionUnitTests
+.build/release/pinentry-companion setup --dry-run
+printf 'NOP\nHELP\nBYE\n' | .build/release/pinentry-companion
 ```
 
-Using gpg should then use pinentry-mac to provide a GUI prompt for your GPG passphrase:
+After installing the binary you plan to use, run:
 
 ```sh
-$ echo 1234 | gpg -as -
+pinentry-companion doctor
 ```
 
-Make sure you check the "Save in Keychain" box on the prompt.
-You may then get a second prompt, this time for your login password, to authorize pinentry-mac to create and use the Keychain entry to store your GPG passphrase.
-If so, use "Always Allow" to avoid future prompts.
-
-You should now be able to see the new Keychain entry via the same command as before:
+For an explicit local-authentication check without a GPG key, run:
 
 ```sh
-$ security find-generic-password -s 'GnuPG'
+pinentry-companion doctor auth
 ```
 
-Continue on to the next section to replace this password prompt with a TouchID prompt.
+End-to-end GPG signing or decryption tests are still manual because they require choosing a specific local key.
 
-### Configuring pinentry-touchid
+## Acknowledgements
 
-Once your Keychain is configured correctly, you can update your `gpg-agent.conf` with the correct path for `pinentry-program` pointing to the full path to `pinentry-touchid`.
-Remember to restart the GPG Agent each time you make a change to this configuration file:
+This project builds on the documented GnuPG pinentry/Assuan protocol and Apple's LocalAuthentication and Security frameworks.
 
-```sh
-$ gpgconf --kill gpg-agent
-```
+## License
 
-We recommend disabling the option to store the password in the macOS Keychain for the default
-pinentry-mac program with the following option:
-
-```sh
-$ defaults write org.gpgtools.common DisableKeychain -bool yes
-```
-
-This will allow `pinentry-touchid` to create and automatically take ownership of the entry in the
-Keychain. If an entry already exists in the Keychain you need to always allow `pinentry-touchid` to
-access the existing entry.
-
-## Disclaimer
-
-This project does not store the password/pin in the [Secure
-Enclave](https://support.apple.com/en-gb/guide/security/sec59b0b31ff/web) of your device, instead
-uses the normal Keychain entry from
-[pinentry-mac](https://github.com/GPGTools/pinentry/tree/master/macosx) if available, or creates a
-new one.
-
-## Tested on
-
-I've tested `pinentry-touchid` in the following combinations of devices and macOS versions:
-
-* MacBook Pro (15-inch, 2018), macOS Catalina - 10.15.7
-* MacBook Pro (15-inch, 2018), macOS Big Sur - 11.4, 11.5.0, 11.5.1
-* MacBook Pro (16-inch, Late 2019), macOS Big Sur - 11.4, 11.5.1
-* MacBook Pro (16-inch, Late 2021), macOS Monterey - 12.2
-
-## Links
-
-* The project icon is taken from <a href="https://icons8.com/icon/BebbEec6QUjh/touch-id">Touch ID icon by Icons8</a>.
+Apache License 2.0. See [LICENSE](LICENSE).

@@ -2,46 +2,27 @@ name: Build
 
 on:
   push:
-    branches:
-      - main
+    branches: [swift-greenfield]
   pull_request:
   workflow_dispatch:
 
 jobs:
-  # Run tests.
-  test:
-    if: ${{ !contains(github.event.head_commit.message, 'docs') }}
-    strategy:
-      matrix:
-        go-version: [1.16.x]
-        platform: [macos-latest]
-    runs-on: ${{ matrix.platform }}
+  build:
+    name: Swift build and protocol smoke test
+    runs-on: macos-latest
     steps:
-      - name: Install Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ matrix.go-version }}
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Create Keychain
-        uses: sinoru/actions-setup-keychain@v1.0
+      - name: Build
+        run: swift build -c release --product pinentry-companion
 
       - name: Test
-        run: go test ./...
+        run: swift run PinentryCompanionUnitTests
 
-      - name: Remove old XCode SDKs
-        run: sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: '~> v0'
-          args: build --rm-dist --snapshot
-
-      - name: Upload assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: pinentry-touchid
-          path: dist/*
+      - name: Protocol smoke test
+        run: |
+          output="$(printf 'NOP\nHELP\nBYE\n' | .build/release/pinentry-companion)"
+          printf '%s\n' "$output"
+          grep -q 'OK Hi from pinentry-companion!' <<< "$output"
+          grep -q '# GETPIN' <<< "$output"

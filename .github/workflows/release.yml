@@ -1,33 +1,33 @@
-name: goreleaser
+name: Release
 
 on:
   push:
-    tags:
-    - '*'
+    tags: ['v*']
 
 jobs:
-  goreleaser:
+  release:
+    name: Build release artifact
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Unshallow
-        run: git fetch --prune --unshallow
+      - name: Build
+        run: swift build -c release --product pinentry-companion
 
-      - name: Set up Go
-        uses: actions/setup-go@v1
+      - name: Package
+        run: |
+          mkdir -p dist
+          arch="$(uname -m)"
+          artifact="pinentry-companion-${GITHUB_REF_NAME}-macos-${arch}.tar.gz"
+          echo "ARTIFACT=${artifact}" >> "$GITHUB_ENV"
+          cp .build/release/pinentry-companion dist/pinentry-companion
+          (cd dist && shasum -a 256 pinentry-companion > checksums.txt)
+          tar -C dist -czf "dist/${artifact}" pinentry-companion checksums.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          go-version: 1.16.x
-
-      - name: Remove old XCode SDKs
-        run: sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: '~> v0'
-          args: release --rm-dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          files: dist/${{ env.ARTIFACT }}

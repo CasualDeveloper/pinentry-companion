@@ -1,1 +1,0 @@
-module github.com/ikitsuchi/go-touchid

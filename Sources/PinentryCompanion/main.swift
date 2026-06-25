@@ -1,0 +1,3 @@
+import PinentryCompanionCore
+
+CommandLineEntry.run()
