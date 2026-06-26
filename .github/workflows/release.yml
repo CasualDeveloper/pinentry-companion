@@ -32,7 +32,7 @@ jobs:
           for arch in arm64 x86_64; do
             swift build -c release --arch "$arch" --product pinentry-companion
             bin_path="$(swift build -c release --arch "$arch" --show-bin-path)/pinentry-companion"
-            package_dir="pinentry-companion-${RELEASE_TAG}-macos-${arch}"
+            package_dir="pinentry-companion-${RELEASE_TAG}-${arch}"
             artifact="${package_dir}.tar.gz"
 
             mkdir -p "dist/${package_dir}"
@@ -51,6 +51,6 @@ jobs:
           fail_on_unmatched_files: true
           generate_release_notes: true
           files: |
-            dist/pinentry-companion-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz
-            dist/pinentry-companion-${{ env.RELEASE_TAG }}-macos-x86_64.tar.gz
+            dist/pinentry-companion-${{ env.RELEASE_TAG }}-arm64.tar.gz
+            dist/pinentry-companion-${{ env.RELEASE_TAG }}-x86_64.tar.gz
             dist/SHA256SUMS
