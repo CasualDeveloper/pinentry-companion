@@ -36,13 +36,24 @@ That means your GPG passphrase becomes unlockable by macOS local authentication 
 - `pinentry-mac`
 - Swift 6.3 or newer for source builds
 
-With Homebrew:
+## Install With Homebrew
 
 ```sh
-brew install gnupg pinentry-mac
+brew tap CasualDeveloper/tap
+brew install pinentry-companion
+pinentry-companion setup
+pinentry-companion doctor
 ```
 
-## Build
+## Build From Source
+
+Install runtime dependencies:
+
+```sh
+brew install gnupg pinentry pinentry-mac
+```
+
+Build:
 
 ```sh
 swift build -c release --product pinentry-companion
