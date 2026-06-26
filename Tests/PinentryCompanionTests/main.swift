@@ -140,7 +140,7 @@ func testKeychainAccessPolicyFlags() throws {
         try expect(flags.contains(.biometryAny), "Keychain access policy should include biometryAny on macOS 15+")
         try expect(flags.contains(.devicePasscode), "Keychain access policy should include devicePasscode on macOS 15+")
         try expect(flags.contains(.or), "Keychain access policy should combine macOS 15+ constraints with OR")
-        try expect(flags.contains(.companion), "Keychain access policy should include companion on macOS 15+")
+        try expect(flags.contains(KeychainAccessPolicy.companionFlag), "Keychain access policy should include companion on macOS 15+")
         try expect(KeychainAccessPolicy.summary == "companion OR biometryAny OR devicePasscode", "Keychain access policy summary mismatch")
     } else {
         try expect(flags.contains(.userPresence), "Legacy Keychain access policy should include userPresence")

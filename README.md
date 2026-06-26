@@ -34,7 +34,7 @@ That means your GPG passphrase becomes unlockable by macOS local authentication 
 - macOS 10.13 or newer
 - GnuPG
 - `pinentry-mac`
-- Swift 6.1 or newer for source builds
+- Swift 5.10 or newer for source builds
 
 ## Install With Homebrew
 

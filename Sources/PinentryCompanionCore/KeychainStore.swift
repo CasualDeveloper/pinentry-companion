@@ -265,9 +265,13 @@ public enum KeychainAccessPolicy {
 
     public static var flags: SecAccessControlCreateFlags {
         if #available(macOS 15.0, *) {
-            return [.companion, .or, .biometryAny, .devicePasscode]
+            return [companionFlag, .or, .biometryAny, .devicePasscode]
         }
         return .userPresence
+    }
+
+    public static var companionFlag: SecAccessControlCreateFlags {
+        SecAccessControlCreateFlags(rawValue: 1 << 5)
     }
 
     public static var summary: String {
@@ -280,7 +284,7 @@ public enum KeychainAccessPolicy {
     public static var storageCandidates: [Policy] {
         if #available(macOS 15.0, *) {
             return [
-                Policy(flags: [.companion, .or, .biometryAny, .devicePasscode], summary: "companion OR biometryAny OR devicePasscode", isPreferred: true),
+                Policy(flags: [companionFlag, .or, .biometryAny, .devicePasscode], summary: "companion OR biometryAny OR devicePasscode", isPreferred: true),
                 Policy(flags: .userPresence, summary: "userPresence", isPreferred: false),
             ]
         }
