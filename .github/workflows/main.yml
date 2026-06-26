@@ -2,20 +2,25 @@ name: Build
 
 on:
   push:
-    branches: [swift-greenfield]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 jobs:
   build:
-    name: Swift build and protocol smoke test
+    name: Swift build, tests, and protocol smoke test
     runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build native release binary
         run: swift build -c release --product pinentry-companion
+
+      - name: Build release binaries for supported architectures
+        run: |
+          swift build -c release --arch arm64 --product pinentry-companion
+          swift build -c release --arch x86_64 --product pinentry-companion
 
       - name: Test
         run: swift run PinentryCompanionUnitTests

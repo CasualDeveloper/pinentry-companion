@@ -3,31 +3,54 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish, for example v0.1.0
+        required: true
+        type: string
 
 jobs:
   release:
-    name: Build release artifact
+    name: Build release artifacts
     runs-on: macos-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
-      - name: Build
-        run: swift build -c release --product pinentry-companion
-
-      - name: Package
+      - name: Build and package macOS binaries
         run: |
+          set -euo pipefail
           mkdir -p dist
-          arch="$(uname -m)"
-          artifact="pinentry-companion-${GITHUB_REF_NAME}-macos-${arch}.tar.gz"
-          echo "ARTIFACT=${artifact}" >> "$GITHUB_ENV"
-          cp .build/release/pinentry-companion dist/pinentry-companion
-          (cd dist && shasum -a 256 pinentry-companion > checksums.txt)
-          tar -C dist -czf "dist/${artifact}" pinentry-companion checksums.txt
+
+          for arch in arm64 x86_64; do
+            swift build -c release --arch "$arch" --product pinentry-companion
+            bin_path="$(swift build -c release --arch "$arch" --show-bin-path)/pinentry-companion"
+            package_dir="pinentry-companion-${RELEASE_TAG}-macos-${arch}"
+            artifact="${package_dir}.tar.gz"
+
+            mkdir -p "dist/${package_dir}"
+            cp "$bin_path" "dist/${package_dir}/pinentry-companion"
+            cp LICENSE README.md "dist/${package_dir}/"
+            shasum -a 256 "dist/${package_dir}/pinentry-companion" > "dist/${package_dir}/pinentry-companion.sha256"
+            tar -C dist -czf "dist/${artifact}" "$package_dir"
+          done
+
+          (cd dist && shasum -a 256 *.tar.gz > SHA256SUMS)
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ env.ARTIFACT }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          files: |
+            dist/pinentry-companion-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz
+            dist/pinentry-companion-${{ env.RELEASE_TAG }}-macos-x86_64.tar.gz
+            dist/SHA256SUMS
