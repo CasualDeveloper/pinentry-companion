@@ -157,6 +157,8 @@ public enum CommandLineEntry {
             report(.ok, "Keychain ACL storage", keychainACLCheck.detail)
         } else if keychainACLCheck.canStore {
             report(.warn, "Keychain ACL storage", keychainACLCheck.detail)
+        } else if keychainACLCheck.isUnsignedBuildLimitation {
+            report(.info, "Keychain ACL storage", keychainACLCheck.userDetail)
         } else {
             report(.warn, "Keychain ACL storage", keychainACLCheck.detail)
         }
@@ -215,7 +217,7 @@ public enum CommandLineEntry {
         printReportItem("Homebrew package", homebrewPackageVersion())
         printReportItem("Local authentication", inlineCode(LocalAuthenticator.summary))
         printReportItem("Keychain storage", KeychainStorage.storageCheck().detail)
-        printReportItem("Keychain ACL storage", KeychainAccessPolicy.storageCheck().detail)
+        printReportItem("Keychain ACL storage", KeychainAccessPolicy.storageCheck().reportDetail)
         printReportItem("protocol GETINFO", runProtocolCheck(currentPath).detail)
         printOutput()
 
@@ -473,6 +475,7 @@ public enum CommandLineEntry {
     }
 
     private enum DoctorStatus {
+        case info
         case ok
         case warn
         case fail
@@ -486,6 +489,7 @@ public enum CommandLineEntry {
     private static func report(_ status: DoctorStatus, _ name: String, _ detail: String) {
         let label: String
         switch status {
+        case .info: label = "[info]"
         case .ok: label = "[ok]"
         case .warn: label = "[warn]"
         case .fail: label = "[fail]"

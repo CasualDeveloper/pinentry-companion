@@ -261,6 +261,23 @@ public enum KeychainAccessPolicy {
         public var canStore: Bool
         public var usesPreferredPolicy: Bool
         public var detail: String
+        public var missingEntitlement: Bool
+
+        public var isUnsignedBuildLimitation: Bool {
+            !canStore && missingEntitlement
+        }
+
+        public var userDetail: String {
+            if isUnsignedBuildLimitation { return Self.unsignedBuildDetail }
+            return detail
+        }
+
+        public var reportDetail: String {
+            if isUnsignedBuildLimitation { return "\(Self.unsignedBuildDetail); raw check: \(detail)" }
+            return detail
+        }
+
+        public static let unsignedBuildDetail = "unavailable for unsigned/Homebrew builds; using app-level LocalAuthentication gate"
     }
 
     public static var flags: SecAccessControlCreateFlags {
@@ -311,6 +328,8 @@ public enum KeychainAccessPolicy {
 
     public static func storageCheck() -> CheckResult {
         var failures: [String] = []
+        var sawFailure = false
+        var allFailuresMissingEntitlement = true
         for policy in storageCandidates {
             let result = temporaryStorageCheck(policy: policy)
             if result.canStore {
@@ -322,16 +341,20 @@ public enum KeychainAccessPolicy {
                 return CheckResult(
                     canStore: true,
                     usesPreferredPolicy: false,
-                    detail: prefix + "fallback \(policy.summary) temporary ACL item add/delete OK"
+                    detail: prefix + "fallback \(policy.summary) temporary ACL item add/delete OK",
+                    missingEntitlement: false
                 )
             }
+            sawFailure = true
+            allFailuresMissingEntitlement = allFailuresMissingEntitlement && result.missingEntitlement
             failures.append("\(policy.summary): \(result.detail)")
         }
 
         return CheckResult(
             canStore: false,
             usesPreferredPolicy: false,
-            detail: failures.joined(separator: "; ")
+            detail: failures.joined(separator: "; "),
+            missingEntitlement: sawFailure && allFailuresMissingEntitlement
         )
     }
 
@@ -353,18 +376,38 @@ public enum KeychainAccessPolicy {
 
             let addStatus = SecItemAdd(item as CFDictionary, nil)
             guard addStatus == errSecSuccess else {
-                return CheckResult(canStore: false, usesPreferredPolicy: policy.isPreferred, detail: "SecItemAdd failed: \(statusDescription(addStatus))")
+                return CheckResult(
+                    canStore: false,
+                    usesPreferredPolicy: policy.isPreferred,
+                    detail: "SecItemAdd failed: \(statusDescription(addStatus))",
+                    missingEntitlement: addStatus == errSecMissingEntitlement
+                )
             }
 
             let deleteStatus = SecItemDelete(query as CFDictionary)
             guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
-                return CheckResult(canStore: false, usesPreferredPolicy: policy.isPreferred, detail: "SecItemAdd OK, cleanup failed: \(statusDescription(deleteStatus))")
+                return CheckResult(
+                    canStore: false,
+                    usesPreferredPolicy: policy.isPreferred,
+                    detail: "SecItemAdd OK, cleanup failed: \(statusDescription(deleteStatus))",
+                    missingEntitlement: false
+                )
             }
 
-            return CheckResult(canStore: true, usesPreferredPolicy: policy.isPreferred, detail: "\(policy.summary) temporary ACL item add/delete OK")
+            return CheckResult(
+                canStore: true,
+                usesPreferredPolicy: policy.isPreferred,
+                detail: "\(policy.summary) temporary ACL item add/delete OK",
+                missingEntitlement: false
+            )
         } catch {
             _ = SecItemDelete(query as CFDictionary)
-            return CheckResult(canStore: false, usesPreferredPolicy: policy.isPreferred, detail: String(describing: error))
+            return CheckResult(
+                canStore: false,
+                usesPreferredPolicy: policy.isPreferred,
+                detail: String(describing: error),
+                missingEntitlement: false
+            )
         }
     }
 

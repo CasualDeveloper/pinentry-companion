@@ -23,7 +23,7 @@ This tool optimizes local convenience for macOS GPG users. It stores the GPG key
 
 On macOS 15 and later, unlock attempts use LocalAuthentication companion/biometry policy where available, allowing supported companion devices such as Apple Watch or Touch ID, with device-owner authentication fallback for the macOS account password. Older macOS versions use device-owner authentication.
 
-Keychain-enforced companion ACL storage requires a signed build with the required Keychain entitlement. `pinentry-companion doctor` reports whether that ACL is available. When ACL storage is available, new cached entries are stored under an ACL-protected Keychain service and macOS enforces authentication on read. Source/Homebrew builds fall back to the app-level LocalAuthentication gate described above.
+Keychain-enforced companion ACL storage requires a signed build with the required Keychain entitlement. `pinentry-companion doctor` reports this as informational when ACL storage is unavailable for unsigned/Homebrew builds. When ACL storage is available, new cached entries are stored under an ACL-protected Keychain service and macOS enforces authentication on read. Source/Homebrew builds fall back to the app-level LocalAuthentication gate described above.
 
 That means your GPG passphrase becomes unlockable by macOS local authentication rather than a separately typed GPG passphrase. If you require your GPG passphrase to remain independent from your macOS account credentials, do not use this tool.
 
