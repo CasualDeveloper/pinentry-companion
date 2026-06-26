@@ -13,7 +13,7 @@ on:
 jobs:
   release:
     name: Build release artifacts
-    runs-on: macos-latest
+    runs-on: macos-26
     permissions:
       contents: write
     env:
