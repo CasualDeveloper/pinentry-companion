@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">pinentry-companion logo</title>
   <desc id="desc">A terminal prompt inside a P, enclosed by a C.</desc>
-  <g fill="none" stroke="#141412" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="none" stroke="#f0f6fc" stroke-linecap="round" stroke-linejoin="round">
     <path d="M390 116a190 190 0 1 0 0 280" stroke-width="30"/>
     <path d="M198 372V140h64a64 64 0 0 1 0 128h-64" stroke-width="36"/>
     <path d="m235 184 26 21-26 21" stroke-width="15"/>
