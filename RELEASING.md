@@ -54,6 +54,8 @@ printf 'GETINFO flavor\nGETINFO version\nBYE\n' | ./pinentry-companion
 
 Use a disposable macOS account or VM with a passphrase-protected test GPG key. For the final gate, download the draft-release assets and verify `SHA256SUMS` and both attestations. Copy the published tap formula somewhere outside the tap. In the tap's working copy, change `version`, the two architecture URLs and SHA-256 digests, and replace the unversioned macOS requirement with `depends_on macos: :sonoma`. Candidate URLs may be absolute `file://` URLs to the downloaded archives. Keep Homebrew on that local formula while testing:
 
+Do not substitute a changed `HOME`, `CFFIXED_USER_HOME`, `GNUPGHOME`, or an isolated Homebrew prefix for the separate account or VM. `CFPreferences` can still communicate with the logged-in user's `cfprefsd`, and the Keychain and LocalAuthentication checks remain account-scoped. Those environment changes are useful for non-mutating package checks only, not for lifecycle or authentication tests.
+
 ```sh
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_FROM_API=1 \
   brew install CasualDeveloper/tap/pinentry-companion
@@ -67,4 +69,4 @@ Run two separate passes from clean snapshots:
 
 Releases before 0.2.0 did not create a lifecycle record covering both `gpg-agent.conf` and `DisableKeychain`. They could leave a timestamped configuration backup, but did not retain the prior preference state. The upgrade pass therefore verifies a safe functional migration, not reconstruction of state that the old release never saved. If a pre-0.2.0 configuration already points at `pinentry-companion`, the new lifecycle record adopts that configuration as its baseline; `uninstall --prepare` will correctly refuse to remove the binary until the user configures a retained fallback pinentry. Exact restore and one-command uninstall preparation are required in the fresh-install pass, where 0.2.0 owns the complete lifecycle.
 
-Do not publish the draft release or update the public tap formula until both passes succeed using those exact ad hoc-signed draft assets. After publication, replace the candidate `file://` URLs with the matching GitHub release URLs, retain `depends_on macos: :sonoma`, and rerun the strict formula audit and test before committing the tap update.
+Do not publish the draft release or update the public tap formula until both passes succeed using those exact ad hoc-signed draft assets. After publication, replace the candidate `file://` URLs with the matching GitHub release URLs, retain `depends_on macos: :sonoma`, and update the formula test to assert both `pinentry-companion --version` and the `GETINFO version` response in addition to the flavor response. Rerun the strict formula audit and test before committing the tap update.
