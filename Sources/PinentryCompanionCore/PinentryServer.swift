@@ -1,69 +1,145 @@
+import Darwin
 import Foundation
+
+protocol PassphraseCache {
+    func password(identity: KeychainIdentity, reason: String) throws -> String
+    func store(identity: KeychainIdentity, password: String) throws
+    func delete(identity: KeychainIdentity) throws
+}
+
+protocol FallbackPinentryClient {
+    func getPIN(settings: PinentrySettings) throws -> String
+    func confirm(settings: PinentrySettings) throws
+    func message(settings: PinentrySettings) throws
+}
+
+protocol PinentryServerOutput {
+    func writeLine(_ command: String, _ parameters: String)
+    func writeData(_ value: String)
+    func writeError(_ error: Assuan.ProtocolError)
+}
+
+struct AssuanPinentryServerOutput: PinentryServerOutput {
+    func writeLine(_ command: String, _ parameters: String = "") {
+        Assuan.writeLine(command, parameters)
+    }
+
+    func writeData(_ value: String) {
+        Assuan.writeData(value)
+    }
+
+    func writeError(_ error: Assuan.ProtocolError) {
+        Assuan.writeError(error)
+    }
+}
 
 final class PinentryServer {
     private var settings = PinentrySettings()
-    private let keychain = KeychainStore()
+    private let cache: any PassphraseCache
+    private let makeFallback: () throws -> any FallbackPinentryClient
+    private let output: any PinentryServerOutput
+
+    init(
+        cache: any PassphraseCache = KeychainStore(),
+        fallbackFactory: @escaping () throws -> any FallbackPinentryClient = { try FallbackPinentry() },
+        output: any PinentryServerOutput = AssuanPinentryServerOutput()
+    ) {
+        self.cache = cache
+        makeFallback = fallbackFactory
+        self.output = output
+    }
 
     func run() {
-        Assuan.writeLine("OK", "Hi from pinentry-companion!")
+        output.writeLine("OK", "Hi from pinentry-companion!")
 
         while let rawLine = readLine(strippingNewline: true) {
-            do {
-                guard let command = try Assuan.parse(rawLine) else { continue }
-                var shouldExit = false
-                try handle(command, shouldExit: &shouldExit)
-                if shouldExit { return }
-            } catch let error as Assuan.ProtocolError {
-                Assuan.writeError(error)
-            } catch let error as FallbackPinentryError {
-                Assuan.writeError(error.protocolError ?? cancelError(error.description))
-            } catch {
-                Assuan.writeError(cancelError(error.localizedDescription))
-            }
+            if process(rawLine) { return }
         }
+    }
+
+    @discardableResult
+    func process(_ rawLine: String) -> Bool {
+        do {
+            guard let command = try Assuan.parse(rawLine) else { return false }
+            var shouldExit = false
+            try handle(command, shouldExit: &shouldExit)
+            return shouldExit
+        } catch let error as Assuan.ProtocolError {
+            output.writeError(error)
+        } catch let error as FallbackPinentryError {
+            output.writeError(error.protocolError ?? cancelError(error.description))
+        } catch {
+            output.writeError(cancelError(error.localizedDescription))
+        }
+
+        return false
     }
 
     private func handle(_ command: Assuan.Command, shouldExit: inout Bool) throws {
         switch command.name {
         case "BYE":
-            Assuan.writeLine("OK")
+            output.writeLine("OK", "")
             shouldExit = true
         case "NOP":
-            Assuan.writeLine("OK")
+            output.writeLine("OK", "")
         case "RESET":
             settings.reset()
-            Assuan.writeLine("OK")
+            output.writeLine("OK", "")
         case "OPTION":
             try setOption(command.parameters)
-            Assuan.writeLine("OK")
+            output.writeLine("OK", "")
         case "HELP":
             writeHelp(command.parameters)
         case "GETINFO":
             try writeInfo(command.parameters)
         case "CANCEL", "END":
-            Assuan.writeLine("OK")
-        case "SETDESC", "SETKEYDESC": settings.description = command.parameters; Assuan.writeLine("OK")
-        case "SETPROMPT": settings.prompt = command.parameters; Assuan.writeLine("OK")
-        case "SETREPEAT": settings.repeatPrompt = command.parameters; Assuan.writeLine("OK")
-        case "SETREPEATERROR": settings.repeatError = command.parameters; Assuan.writeLine("OK")
-        case "SETERROR": settings.error = command.parameters; Assuan.writeLine("OK")
-        case "SETOK": settings.okButton = command.parameters; Assuan.writeLine("OK")
-        case "SETNOTOK": settings.notOkButton = command.parameters; Assuan.writeLine("OK")
-        case "SETCANCEL": settings.cancelButton = command.parameters; Assuan.writeLine("OK")
-        case "SETQUALITYBAR": settings.qualityBar = command.parameters; Assuan.writeLine("OK")
-        case "SETTITLE": settings.title = command.parameters; Assuan.writeLine("OK")
-        case "SETTIMEOUT": settings.timeoutSeconds = Int(command.parameters) ?? 0; Assuan.writeLine("OK")
-        case "SETKEYINFO": settings.keyInfo = command.parameters == "--clear" ? "" : command.parameters; Assuan.writeLine("OK")
+            output.writeLine("OK", "")
+        case "SETDESC", "SETKEYDESC": settings.description = command.parameters; output.writeLine("OK", "")
+        case "SETPROMPT": settings.prompt = command.parameters; output.writeLine("OK", "")
+        case "SETREPEAT": settings.repeatPrompt = command.parameters; output.writeLine("OK", "")
+        case "SETREPEATERROR": settings.repeatError = command.parameters; output.writeLine("OK", "")
+        case "SETREPEATOK": settings.repeatOK = command.parameters; output.writeLine("OK", "")
+        case "SETERROR": settings.error = command.parameters; output.writeLine("OK", "")
+        case "SETOK": settings.okButton = command.parameters; output.writeLine("OK", "")
+        case "SETNOTOK": settings.notOkButton = command.parameters; output.writeLine("OK", "")
+        case "SETCANCEL": settings.cancelButton = command.parameters; output.writeLine("OK", "")
+        case "SETQUALITYBAR": settings.qualityBar = command.parameters; output.writeLine("OK", "")
+        case "SETQUALITYBAR_TT": settings.qualityBarTooltip = command.parameters; output.writeLine("OK", "")
+        case "SETGENPIN": settings.generatePINLabel = command.parameters; output.writeLine("OK", "")
+        case "SETGENPIN_TT": settings.generatePINTooltip = command.parameters; output.writeLine("OK", "")
+        case "SETTITLE": settings.title = command.parameters; output.writeLine("OK", "")
+        case "SETTIMEOUT":
+            guard let timeout = Int(command.parameters), timeout >= 0 else {
+                throw Assuan.ProtocolError(
+                    source: .assuan,
+                    code: .invalidValue,
+                    sourceName: "assuan",
+                    message: "SETTIMEOUT requires a non-negative integer"
+                )
+            }
+            settings.timeoutSeconds = timeout
+            output.writeLine("OK", "")
+        case "SETKEYINFO": settings.keyInfo = command.parameters == "--clear" ? "" : command.parameters; output.writeLine("OK", "")
+        case "CLEARPASSPHRASE":
+            let identity = try KeychainIdentity(keyInfo: command.parameters)
+            try cache.delete(identity: identity)
+            output.writeLine("OK", "")
         case "GETPIN":
-            let pin = try getPIN()
-            Assuan.writeData(pin)
-            Assuan.writeLine("OK")
+            defer { settings.error = "" }
+            let result = try getPIN()
+            if result.fromCache { output.writeLine("S", "PASSWORD_FROM_CACHE") }
+            if !settings.repeatPrompt.isEmpty { output.writeLine("S", "PIN_REPEATED") }
+            output.writeData(result.value)
+            output.writeLine("OK", "")
         case "CONFIRM":
-            try FallbackPinentry().confirm(settings: settings)
-            Assuan.writeLine("OK")
+            defer { settings.error = "" }
+            var confirmSettings = settings
+            confirmSettings.confirmParameters = command.parameters
+            try makeFallback().confirm(settings: confirmSettings)
+            output.writeLine("OK", "")
         case "MESSAGE":
-            try FallbackPinentry().message(settings: settings)
-            Assuan.writeLine("OK")
+            try makeFallback().message(settings: settings)
+            output.writeLine("OK", "")
         default:
             throw Assuan.ProtocolError(
                 source: .assuan,
@@ -74,49 +150,53 @@ final class PinentryServer {
         }
     }
 
-    private func getPIN() throws -> String {
-        if let identity = keychainIdentity, shouldUseKeychainPath {
-            return try getPINUsingKeychain(identity: identity)
+    private struct PINResult {
+        var value: String
+        var fromCache: Bool
+    }
+
+    private func getPIN() throws -> PINResult {
+        guard let identity = authorizedCacheIdentity else {
+            return PINResult(value: try promptForPIN(), fromCache: false)
         }
-        return try promptViaFallbackAndRepairKeychainIfNeeded()
-    }
-
-    private var shouldUseKeychainPath: Bool {
-        settings.repeatPrompt.isEmpty &&
-            settings.options.allowExternalPasswordCache &&
-            !settings.keyInfo.isEmpty
-    }
-
-    private var keychainIdentity: KeychainIdentity? {
-        try? KeychainIdentity(keyInfo: settings.keyInfo)
-    }
-
-    private func getPINUsingKeychain(identity: KeychainIdentity) throws -> String {
         if settings.isBadPassphraseRetry {
-            try? keychain.delete(identity: identity)
+            settings.cacheAttempted = true
+            try? cache.delete(identity: identity)
             return try promptAndStore(identity: identity)
         }
+        guard !settings.cacheAttempted else { return try promptAndStore(identity: identity) }
+        settings.cacheAttempted = true
+        return try getPINUsingCache(identity: identity)
+    }
 
+    private var authorizedCacheIdentity: KeychainIdentity? {
+        guard settings.repeatPrompt.isEmpty,
+              settings.options.allowExternalPasswordCache,
+              !settings.keyInfo.isEmpty
+        else { return nil }
+        return try? KeychainIdentity(keyInfo: settings.keyInfo)
+    }
+
+    private func getPINUsingCache(identity: KeychainIdentity) throws -> PINResult {
         do {
-            return try keychain.password(identity: identity, reason: authenticationReason(for: identity))
+            return PINResult(
+                value: try cache.password(identity: identity, reason: authenticationReason(for: identity)),
+                fromCache: true
+            )
         } catch KeychainStoreError.notFound {
             return try promptAndStore(identity: identity)
         }
     }
 
-    private func promptViaFallbackAndRepairKeychainIfNeeded() throws -> String {
-        if settings.isBadPassphraseRetry, let identity = keychainIdentity {
-            try? keychain.delete(identity: identity)
-            return try promptAndStore(identity: identity)
-        }
-        return try FallbackPinentry().getPIN(settings: settings)
+    private func promptAndStore(identity: KeychainIdentity) throws -> PINResult {
+        let pin = try promptForPIN()
+        try? cache.store(identity: identity, password: pin)
+        return PINResult(value: pin, fromCache: false)
     }
 
-    private func promptAndStore(identity: KeychainIdentity) throws -> String {
-        let pin = try FallbackPinentry().getPIN(settings: settings)
-        guard !pin.isEmpty else { throw cancelError("pinentry-mac didn't return a password") }
-
-        try keychain.store(identity: identity, password: pin)
+    private func promptForPIN() throws -> String {
+        let pin = try makeFallback().getPIN(settings: settings)
+        guard !pin.isEmpty else { throw cancelError("fallback pinentry didn't return a password") }
         return pin
     }
 
@@ -130,17 +210,23 @@ final class PinentryServer {
 
     private func writeHelp(_ command: String) {
         if command.isEmpty {
-            ["NOP", "OPTION", "CANCEL", "BYE", "RESET", "END", "HELP", "GETINFO", "SETDESC", "SETKEYDESC", "GETPIN", "CONFIRM", "MESSAGE"].forEach {
-                Assuan.writeLine("#", $0)
+            [
+                "NOP", "OPTION", "CANCEL", "BYE", "RESET", "END", "HELP", "GETINFO",
+                "SETDESC", "SETKEYDESC", "SETPROMPT", "SETREPEAT", "SETREPEATERROR",
+                "SETREPEATOK", "SETERROR", "SETOK", "SETNOTOK", "SETCANCEL", "SETTITLE",
+                "SETTIMEOUT", "SETKEYINFO", "SETQUALITYBAR", "SETQUALITYBAR_TT", "SETGENPIN",
+                "SETGENPIN_TT", "CLEARPASSPHRASE", "GETPIN", "CONFIRM", "MESSAGE",
+            ].forEach {
+                output.writeLine("#", $0)
             }
         }
-        Assuan.writeLine("OK")
+        output.writeLine("OK", "")
     }
 
     private func writeInfo(_ name: String) throws {
-        let value = try PinentryInfo.value(for: name)
-        Assuan.writeData(value)
-        Assuan.writeLine("OK")
+        let value = try PinentryInfo.value(for: name, options: settings.options)
+        output.writeData(value)
+        output.writeLine("OK", "")
     }
 
     private func cancelError(_ message: String) -> Assuan.ProtocolError {
@@ -150,9 +236,9 @@ final class PinentryServer {
 
 public enum PinentryInfo {
     public static let flavor = "companion"
-    public static let version = "devel"
+    public static let version = ComponentVersion.current
 
-    public static func value(for name: String, environment: [String: String] = ProcessInfo.processInfo.environment, parentProcessID: Int32 = getppid()) throws -> String {
+    public static func value(for name: String, options: PinentryOptions = PinentryOptions()) throws -> String {
         switch name {
         case "flavor":
             return flavor
@@ -161,7 +247,7 @@ public enum PinentryInfo {
         case "pid":
             return String(ProcessInfo.processInfo.processIdentifier)
         case "ttyinfo":
-            return ttyInfo(environment: environment, parentProcessID: parentProcessID)
+            return ttyInfo(options: options)
         case "":
             throw Assuan.ProtocolError(
                 source: .assuan,
@@ -179,14 +265,23 @@ public enum PinentryInfo {
         }
     }
 
-    private static func ttyInfo(environment: [String: String], parentProcessID: Int32) -> String {
+    private static func ttyInfo(options: PinentryOptions) -> String {
         [
-            environment["GPG_TTY"] ?? "",
-            String(parentProcessID),
-            environment["TERM"] ?? "",
+            options.ttyName.isEmpty ? "-" : options.ttyName,
+            options.ttyType.isEmpty ? "-" : options.ttyType,
+            options.display.isEmpty ? "-" : options.display,
+            deviceStat(for: options.ttyName),
+            "\(geteuid())/\(getegid())",
+            "-",
         ]
         .joined(separator: " ")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func deviceStat(for path: String) -> String {
+        guard !path.isEmpty else { return "-" }
+        var info = stat()
+        guard stat(path, &info) == 0 else { return "?" }
+        return String(info.st_mode, radix: 8) + "/\(info.st_uid)/\(info.st_gid)"
     }
 }
 

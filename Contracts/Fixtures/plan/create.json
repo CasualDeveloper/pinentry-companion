@@ -1,0 +1,55 @@
+{
+  "changed": false,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "diagnostics": [
+    {
+      "code": "dependency.gpgconf.missing",
+      "message": "gpgconf is required to reload gpg-agent after this change.",
+      "remediation": "Install GnuPG before applying this plan.",
+      "severity": "error"
+    },
+    {
+      "code": "dependency.fallbackPinentry.missing",
+      "message": "A supported fallback pinentry is required before activation.",
+      "remediation": "Install pinentry-mac, pinentry-curses, or pinentry-tty.",
+      "severity": "error"
+    }
+  ],
+  "operation": "plan",
+  "outcome": "conflict",
+  "schemaVersion": 1,
+  "state": {
+    "applicability": "blocked",
+    "changeRequired": true,
+    "conflicts": [
+      {
+        "code": "gpgconfMissing",
+        "message": "gpgconf is required to reload gpg-agent after this change."
+      },
+      {
+        "code": "fallbackPinentryMissing",
+        "message": "A supported fallback pinentry is required before activation."
+      }
+    ],
+    "disableKeychainPreference": {
+      "action": "set",
+      "afterValue": true,
+      "beforeState": "absent",
+      "domain": "org.gpgtools.common",
+      "key": "DisableKeychain",
+      "reversible": { "reason": "ownershipRecordWillBeCreated", "supported": true }
+    },
+    "gpgConfiguration": {
+      "action": "create",
+      "afterOccurrenceCount": 1,
+      "afterValue": "/opt/homebrew/bin/pinentry-companion",
+      "beforeOccurrenceCount": 0,
+      "beforeValues": [],
+      "reloadAvailable": false,
+      "requiresReload": true,
+      "reversible": { "reason": "ownershipRecordWillBeCreated", "supported": true },
+      "targetDisplayPath": "~/.gnupg/gpg-agent.conf"
+    }
+  }
+}

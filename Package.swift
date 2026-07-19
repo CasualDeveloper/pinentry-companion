@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "pinentry-companion",
-    platforms: [.macOS(.v10_13)],
+    platforms: [.macOS(.v14)],
     products: [
         .executable(name: "pinentry-companion", targets: ["PinentryCompanion"]),
     ],
@@ -15,7 +15,7 @@ let package = Package(
             dependencies: ["PinentryCompanionCore"],
             path: "Sources/PinentryCompanion"
         ),
-        .executableTarget(
+        .testTarget(
             name: "PinentryCompanionUnitTests",
             dependencies: ["PinentryCompanionCore"],
             path: "Tests/PinentryCompanionTests"

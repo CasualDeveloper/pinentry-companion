@@ -5,9 +5,10 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing tag to build and publish, for example v0.1.0
+      ref:
+        description: Branch, commit, or existing tag to build
         required: true
+        default: main
         type: string
 
 jobs:
@@ -16,13 +17,50 @@ jobs:
     runs-on: macos-26
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     env:
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      REQUESTED_REF: ${{ inputs.ref || github.ref_name }}
+      RELEASE_FROM_TAG: ${{ github.event_name == 'push' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ inputs.ref || github.ref_name }}
+
+      - name: Test
+        run: |
+          swift test \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+          python3 Scripts/validate-contracts.py
+
+      - name: Build and smoke test native protocol
+        run: |
+          set -euo pipefail
+          swift build -c release --product pinentry-companion \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+          version_output="$(.build/release/pinentry-companion --version)"
+          if [[ ! "$version_output" =~ ^pinentry-companion\ ([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            printf 'Invalid intrinsic version output: %q\n' "$version_output" >&2
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          output="$(printf 'GETINFO flavor\nGETINFO version\nBYE\n' | .build/release/pinentry-companion)"
+          printf '%s\n' "$output"
+          grep -q '^D companion$' <<< "$output"
+          grep -q "^D ${version}$" <<< "$output"
+          ! grep -q '^ERR ' <<< "$output"
+          release_tag="v${version}"
+          printf 'RELEASE_TAG=%s\n' "$release_tag" >> "$GITHUB_ENV"
+
+          if [[ "$RELEASE_FROM_TAG" == "true" ]]; then
+            test "$REQUESTED_REF" = "$release_tag"
+            git show-ref --verify --quiet "refs/tags/${release_tag}"
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "${release_tag}^{commit}")"
+          fi
 
       - name: Build and package macOS binaries
         run: |
@@ -30,27 +68,122 @@ jobs:
           mkdir -p dist
 
           for arch in arm64 x86_64; do
-            swift build -c release --arch "$arch" --product pinentry-companion
+            swift build -c release --arch "$arch" --product pinentry-companion \
+              -Xswiftc -warnings-as-errors \
+              -Xswiftc -strict-concurrency=complete
             bin_path="$(swift build -c release --arch "$arch" --show-bin-path)/pinentry-companion"
+            test "$(lipo -archs "$bin_path")" = "$arch"
             package_dir="pinentry-companion-${RELEASE_TAG}-${arch}"
             artifact="${package_dir}.tar.gz"
 
             mkdir -p "dist/${package_dir}"
             cp "$bin_path" "dist/${package_dir}/pinentry-companion"
-            cp LICENSE README.md "dist/${package_dir}/"
-            shasum -a 256 "dist/${package_dir}/pinentry-companion" > "dist/${package_dir}/pinentry-companion.sha256"
-            tar -C dist -czf "dist/${artifact}" "$package_dir"
+            release_binary="dist/${package_dir}/pinentry-companion"
+            codesign --force --sign - --options runtime "$release_binary"
+            codesign --verify --strict --verbose=2 "$release_binary"
+
+            signature_details="$(codesign --display --verbose=4 "$release_binary" 2>&1)"
+            grep -Eq 'flags=.*\(.*adhoc.*runtime.*\)' <<< "$signature_details"
+            grep -q '^Signature=adhoc$' <<< "$signature_details"
+            grep -q '^TeamIdentifier=not set$' <<< "$signature_details"
+            test "$(otool -l "$release_binary" | awk '/minos /{print $2; exit}')" = "14.0"
+
+            cp CHANGELOG.md LICENSE README.md RELEASING.md "dist/${package_dir}/"
+            cp -R assets "dist/${package_dir}/"
+            cp -R Contracts "dist/${package_dir}/"
+            (cd "dist/${package_dir}" && shasum -a 256 pinentry-companion > pinentry-companion.sha256)
+            COPYFILE_DISABLE=1 tar -C dist -czf "dist/${artifact}" "$package_dir"
           done
 
           (cd dist && shasum -a 256 *.tar.gz > SHA256SUMS)
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+      - name: Verify packaged release archives
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          (cd dist && shasum -a 256 -c SHA256SUMS)
+
+          for arch in arm64 x86_64; do
+            package_dir="pinentry-companion-${RELEASE_TAG}-${arch}"
+            artifact="dist/${package_dir}.tar.gz"
+            verification_root="${RUNNER_TEMP}/pinentry-companion-verify-${arch}"
+
+            tar -tzf "$artifact" | awk '
+              /(^\/|(^|\/)\.\.(\/|$)|(^|\/)\._)/ { unsafe = 1 }
+              END { exit unsafe ? 1 : 0 }
+            '
+            tar -tzf "$artifact" | awk -v root="${package_dir}/" '
+              index($0, root) != 1 { exit 1 }
+            '
+            tar -tvzf "$artifact" | awk '
+              substr($1, 1, 1) != "d" && substr($1, 1, 1) != "-" { exit 1 }
+            '
+
+            mkdir -p "$verification_root"
+            tar -C "$verification_root" -xzf "$artifact"
+            extracted="${verification_root}/${package_dir}"
+            binary="${extracted}/pinentry-companion"
+            test -x "$binary"
+            test -f "${extracted}/CHANGELOG.md"
+            test -f "${extracted}/LICENSE"
+            test -f "${extracted}/README.md"
+            test -f "${extracted}/RELEASING.md"
+            test -d "${extracted}/assets"
+            test -d "${extracted}/Contracts"
+            (cd "$extracted" && shasum -a 256 -c pinentry-companion.sha256)
+            test "$(lipo -archs "$binary")" = "$arch"
+            test "$(otool -l "$binary" | awk '/minos /{print $2; exit}')" = "14.0"
+            codesign --verify --strict --verbose=2 "$binary"
+
+            signature_details="$(codesign --display --verbose=4 "$binary" 2>&1)"
+            grep -Eq 'flags=.*\(.*adhoc.*runtime.*\)' <<< "$signature_details"
+            grep -q '^Signature=adhoc$' <<< "$signature_details"
+            grep -q '^TeamIdentifier=not set$' <<< "$signature_details"
+
+            case "$(uname -m):${arch}" in
+              "arm64:arm64"|"x86_64:x86_64")
+                test "$("$binary" --version)" = "pinentry-companion ${version}"
+                output="$(printf 'GETINFO flavor\nGETINFO version\nBYE\n' | "$binary")"
+                ;;
+              "arm64:x86_64")
+                test "$(arch -x86_64 "$binary" --version)" = "pinentry-companion ${version}"
+                output="$(printf 'GETINFO flavor\nGETINFO version\nBYE\n' | arch -x86_64 "$binary")"
+                ;;
+              *)
+                continue
+                ;;
+            esac
+            grep -q '^D companion$' <<< "$output"
+            grep -q "^D ${version}$" <<< "$output"
+            ! grep -q '^ERR ' <<< "$output"
+          done
+
+      - name: Upload non-publishing release candidate
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          files: |
-            dist/pinentry-companion-${{ env.RELEASE_TAG }}-arm64.tar.gz
-            dist/pinentry-companion-${{ env.RELEASE_TAG }}-x86_64.tar.gz
+          name: pinentry-companion-release-candidate-${{ github.sha }}
+          path: |
+            dist/pinentry-companion-*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Attest release provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: 'dist/*.tar.gz'
+
+      - name: Create draft GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --draft \
+            --verify-tag \
+            --generate-notes \
+            "dist/pinentry-companion-${RELEASE_TAG}-arm64.tar.gz" \
+            "dist/pinentry-companion-${RELEASE_TAG}-x86_64.tar.gz" \
             dist/SHA256SUMS

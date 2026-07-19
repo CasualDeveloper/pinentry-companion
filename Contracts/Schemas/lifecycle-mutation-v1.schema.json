@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/CasualDeveloper/pinentry-companion/main/Contracts/Schemas/lifecycle-mutation-v1.schema.json",
+  "title": "pinentry-companion lifecycle mutation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "component", "componentVersion", "operation", "outcome", "changed", "diagnostics", "state"],
+  "oneOf": [
+    { "$ref": "#/$defs/setupCommitted" },
+    { "$ref": "#/$defs/setupUnchanged" },
+    { "$ref": "#/$defs/restorationCommitted" },
+    { "$ref": "#/$defs/restorationUnchanged" },
+    { "$ref": "#/$defs/notCommitted" },
+    { "$ref": "#/$defs/rollbackFailed" },
+    { "$ref": "#/$defs/indeterminate" }
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "component": { "const": "pinentry-companion" },
+    "componentVersion": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["setup", "restore", "uninstall"] },
+    "outcome": { "enum": ["ok", "error", "conflict"] },
+    "changed": { "type": "boolean" },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transactionState", "safety"],
+      "properties": {
+        "transactionState": { "enum": ["committed", "unchanged", "restored", "notCommitted", "rollbackFailed", "indeterminate"] },
+        "safety": { "enum": ["exactRestoreStateRecorded", "compareAndSwapVerified", "noMutationCommitted", "manualRecoveryRequired", "inspectionRequired"] }
+      }
+    }
+  },
+  "$defs": {
+    "setupCommitted": {
+      "type": "object",
+      "required": ["operation", "outcome", "changed", "state"],
+      "properties": {
+        "operation": { "const": "setup" },
+        "outcome": { "const": "ok" },
+        "changed": { "const": true },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "committed" },
+            "safety": { "const": "exactRestoreStateRecorded" }
+          }
+        }
+      }
+    },
+    "setupUnchanged": {
+      "type": "object",
+      "required": ["operation", "outcome", "changed", "state"],
+      "properties": {
+        "operation": { "const": "setup" },
+        "outcome": { "const": "ok" },
+        "changed": { "const": false },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "unchanged" },
+            "safety": { "const": "exactRestoreStateRecorded" }
+          }
+        }
+      }
+    },
+    "restorationCommitted": {
+      "type": "object",
+      "required": ["operation", "outcome", "changed", "state"],
+      "properties": {
+        "operation": { "enum": ["restore", "uninstall"] },
+        "outcome": { "const": "ok" },
+        "changed": { "const": true },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "restored" },
+            "safety": { "const": "compareAndSwapVerified" }
+          }
+        }
+      }
+    },
+    "restorationUnchanged": {
+      "type": "object",
+      "required": ["operation", "outcome", "changed", "state"],
+      "properties": {
+        "operation": { "enum": ["restore", "uninstall"] },
+        "outcome": { "const": "ok" },
+        "changed": { "const": false },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "unchanged" },
+            "safety": { "const": "compareAndSwapVerified" }
+          }
+        }
+      }
+    },
+    "notCommitted": {
+      "type": "object",
+      "required": ["outcome", "changed", "state"],
+      "properties": {
+        "outcome": { "enum": ["error", "conflict"] },
+        "changed": { "const": false },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "notCommitted" },
+            "safety": { "const": "noMutationCommitted" }
+          }
+        }
+      }
+    },
+    "rollbackFailed": {
+      "type": "object",
+      "required": ["outcome", "changed", "state"],
+      "properties": {
+        "outcome": { "const": "error" },
+        "changed": { "const": false },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "rollbackFailed" },
+            "safety": { "const": "manualRecoveryRequired" }
+          }
+        }
+      }
+    },
+    "indeterminate": {
+      "type": "object",
+      "required": ["outcome", "changed", "state"],
+      "properties": {
+        "outcome": { "const": "error" },
+        "changed": { "const": false },
+        "state": {
+          "type": "object",
+          "required": ["transactionState", "safety"],
+          "properties": {
+            "transactionState": { "const": "indeterminate" },
+            "safety": { "const": "inspectionRequired" }
+          }
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string", "minLength": 1 },
+        "remediation": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

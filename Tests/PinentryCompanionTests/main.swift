@@ -1,6 +1,7 @@
 import Foundation
-import PinentryCompanionCore
 import Security
+import XCTest
+@testable import PinentryCompanionCore
 
 enum TestFailure: Error, CustomStringConvertible {
     case failed(String)
@@ -42,6 +43,33 @@ func testAssuanCommandParsing() throws {
     let status = try Assuan.parse("S OPTION value")
     try expect(comment == nil, "Comments should be ignored")
     try expect(status == nil, "Status lines should be ignored")
+
+    do {
+        _ = try Assuan.parse(String(repeating: "a", count: Assuan.maxLineLength))
+        throw TestFailure.failed("Oversized Assuan lines should be rejected")
+    } catch let error as Assuan.ProtocolError {
+        try expect(error.code == .invalidValue, "Oversized Assuan line should map to invalidValue")
+    }
+}
+
+func testAssuanDataChunking() throws {
+    let value = String(repeating: "🔐%\n", count: 400)
+    let lines = Assuan.dataLines(value)
+
+    try expect(lines.count > 1, "Long Assuan data should be split across lines")
+    try expect(
+        lines.allSatisfy { $0.utf8.count + 1 <= Assuan.maxLineLength },
+        "Assuan data lines must stay within the byte limit including newline"
+    )
+    let encoded = lines.map { String($0.dropFirst(2)) }.joined()
+    let decoded = try Assuan.unescape(encoded)
+    try expect(decoded == value, "Chunked Assuan data did not round trip")
+}
+
+func testAssuanCommandLineBounding() throws {
+    let line = Assuan.encodedLine("ERR", String(repeating: "é%", count: 1_000))
+    try expect(line.utf8.count <= Assuan.maxLineLength, "Assuan command lines must include the newline in their byte limit")
+    try expect(line.hasSuffix("\n"), "Assuan command lines must end with a newline")
 }
 
 func testAssuanErrorParsing() throws {
@@ -68,23 +96,64 @@ func testKeychainIdentity() throws {
     } catch let error as Assuan.ProtocolError {
         try expect(error.code == .canceled, "Missing SETKEYINFO should map to canceled")
     }
+
+    do {
+        _ = try KeychainIdentity(keyInfo: "n/key\nspoofed prompt")
+        throw TestFailure.failed("Control characters in SETKEYINFO should be rejected")
+    } catch let error as Assuan.ProtocolError {
+        try expect(error.code == .canceled, "Unsafe SETKEYINFO should map to canceled")
+    }
 }
 
 func testOptionsAndBadPassphraseRetry() throws {
     var settings = PinentrySettings()
 
     try PinentryOptionParser.apply("allow-external-password-cache", to: &settings)
+    try PinentryOptionParser.apply("display=:0", to: &settings)
     try PinentryOptionParser.apply("ttyname=/dev/ttys001", to: &settings)
+    try PinentryOptionParser.apply("formatted-passphrase", to: &settings)
+    try PinentryOptionParser.apply("formatted-passphrase-hint=Spaces are visual only", to: &settings)
+    try PinentryOptionParser.apply("allow-emacs-prompt", to: &settings)
     try PinentryOptionParser.apply("default-ok=OK", to: &settings)
 
     try expect(settings.options.allowExternalPasswordCache, "External password cache option not applied")
+    try expect(settings.options.display == ":0", "display option not applied")
     try expect(settings.options.ttyName == "/dev/ttys001", "ttyname option not applied")
+    try expect(settings.options.formattedPassphrase, "formatted-passphrase option not applied")
+    try expect(settings.options.formattedPassphraseHint == "Spaces are visual only", "formatted-passphrase hint mismatch")
+    try expect(settings.options.allowEmacsPrompt, "allow-emacs-prompt option not applied")
+    try expect(settings.options.defaultLabels["default-ok"] == "OK", "default label option not applied")
+
+    settings.keyInfo = "n/transient"
+    settings.repeatPrompt = "Repeat"
+    settings.error = "Bad passphrase"
+    settings.timeoutSeconds = 30
+    settings.cacheAttempted = true
+    settings.reset()
+    try expect(settings.options.allowExternalPasswordCache, "RESET should preserve agent options")
+    try expect(settings.options.display == ":0", "RESET should preserve display context")
+    try expect(settings.options.allowEmacsPrompt, "RESET should preserve emacs prompt permission")
+    try expect(settings.options.defaultLabels["default-ok"] == "OK", "RESET should preserve default labels")
+    try expect(settings.options.ttyName == "/dev/ttys001", "RESET should preserve terminal context")
+    try expect(settings.timeoutSeconds == 30, "RESET should preserve the agent timeout")
+    try expect(!settings.options.formattedPassphrase && settings.options.formattedPassphraseHint.isEmpty, "RESET should clear per-prompt formatting")
+    try expect(settings.keyInfo.isEmpty && settings.repeatPrompt.isEmpty && settings.error.isEmpty, "RESET should clear per-prompt metadata")
+    try expect(!settings.cacheAttempted, "RESET should allow a fresh cache attempt")
 
     do {
         try PinentryOptionParser.apply("unknown-option", to: &settings)
         throw TestFailure.failed("Unknown option should be rejected")
     } catch let error as Assuan.ProtocolError {
         try expect(error.code == .unknownOption, "Unknown option should map to unknownOption")
+    }
+
+    for invalidOption in ["grab=true", "allow-external-password-cache=yes", "default-unknown=value"] {
+        do {
+            try PinentryOptionParser.apply(invalidOption, to: &settings)
+            throw TestFailure.failed("Invalid option should be rejected: \(invalidOption)")
+        } catch let error as Assuan.ProtocolError {
+            try expect(error.code == .unknownOption, "Invalid option should map to unknownOption")
+        }
     }
 
     try expect(!settings.isBadPassphraseRetry, "Empty error should not be a bad-passphrase retry")
@@ -176,6 +245,7 @@ func testGPGAgentConfigParsingAndUpdate() throws {
     """
 
     try expect(GPGAgentConfig.activePinentryProgram(in: original) == "/old/active", "Active pinentry-program parsing mismatch")
+    try expect(GPGAgentConfig.activePinentryPrograms(in: original) == ["/old/active", "/old/duplicate"], "All active pinentry-program directives should be preserved for inspection")
 
     let updated = try GPGAgentConfig.updatedContents(original, pinentryPath: "/new/pinentry-companion")
     let expected = """
@@ -201,6 +271,10 @@ func testGPGAgentConfigAppendAndValidation() throws {
         invalidPathThrew = true
     }
     try expect(invalidPathThrew, "Invalid pinentry path should throw")
+
+    XCTAssertThrowsError(
+        try GPGAgentConfig.updatedContents("", pinentryPath: "/valid-looking\0ignored")
+    )
 }
 
 func testDiagnosticRedaction() throws {
@@ -215,18 +289,22 @@ func testPinentryInfo() throws {
     let processID = try PinentryInfo.value(for: "pid")
 
     try expect(flavor == "companion", "GETINFO flavor mismatch")
-    try expect(version == "devel", "GETINFO version mismatch")
+    try expect(version == ComponentVersion.current, "GETINFO version mismatch")
     try expect(Int(processID) == Int(ProcessInfo.processInfo.processIdentifier), "GETINFO pid mismatch")
 
-    let ttyInfo = try PinentryInfo.value(
-        for: "ttyinfo",
-        environment: ["GPG_TTY": "/dev/ttys001", "TERM": "xterm-256color"],
-        parentProcessID: 1234
-    )
-    try expect(ttyInfo == "/dev/ttys001 1234 xterm-256color", "GETINFO ttyinfo mismatch")
+    var options = PinentryOptions()
+    options.ttyName = "/dev/null"
+    options.ttyType = "xterm-256color"
+    options.display = ":0"
+    let ttyFields = try PinentryInfo.value(for: "ttyinfo", options: options).split(separator: " ").map(String.init)
+    try expect(ttyFields.count == 6, "GETINFO ttyinfo should return six upstream-compatible fields")
+    try expect(Array(ttyFields.prefix(3)) == ["/dev/null", "xterm-256color", ":0"], "GETINFO ttyinfo terminal context mismatch")
+    try expect(ttyFields[3] != "?" && ttyFields[3].split(separator: "/").count == 3, "GETINFO ttyinfo device metadata mismatch")
+    try expect(ttyFields[4] == "\(geteuid())/\(getegid())", "GETINFO ttyinfo identity mismatch")
+    try expect(ttyFields[5] == "-", "GETINFO ttyinfo emacs status mismatch")
 
-    let emptyTTYInfo = try PinentryInfo.value(for: "ttyinfo", environment: [:], parentProcessID: 1234)
-    try expect(emptyTTYInfo == "1234", "GETINFO ttyinfo should trim missing env values")
+    let emptyTTYInfo = try PinentryInfo.value(for: "ttyinfo")
+    try expect(emptyTTYInfo == "- - - - \(geteuid())/\(getegid()) -", "GETINFO ttyinfo missing-value placeholders mismatch")
 
     do {
         _ = try PinentryInfo.value(for: "")
@@ -248,7 +326,7 @@ func testPinentryProtocolCheck() throws {
     OK Hi from pinentry-companion!
     D companion
     OK
-    D devel
+    D 0.2.0
     OK
     D 12345
     OK
@@ -270,31 +348,23 @@ func testPinentryProtocolCheck() throws {
     try expect(!protocolError.passed, "Protocol smoke ERR lines should fail")
 }
 
-let tests: [(String, () throws -> Void)] = [
-    ("Assuan escaping", testAssuanEscapingRoundTrip),
-    ("Assuan command parsing", testAssuanCommandParsing),
-    ("Assuan error parsing", testAssuanErrorParsing),
-    ("Keychain identity", testKeychainIdentity),
-    ("Options and bad-passphrase retry", testOptionsAndBadPassphraseRetry),
-    ("Authentication reason", testAuthenticationReason),
-    ("Fallback pinentry names", testFallbackPinentryNames),
-    ("Keychain presence mapping", testKeychainPresenceMapping),
-    ("Keychain access policy flags", testKeychainAccessPolicyFlags),
-    ("Keychain access policy creates access control", testKeychainAccessPolicyCreatesAccessControl),
-    ("GPG agent config paths", testGPGAgentConfigPaths),
-    ("GPG agent config parsing and update", testGPGAgentConfigParsingAndUpdate),
-    ("GPG agent config append and validation", testGPGAgentConfigAppendAndValidation),
-    ("Diagnostic redaction", testDiagnosticRedaction),
-    ("Pinentry info", testPinentryInfo),
-    ("Pinentry protocol check", testPinentryProtocolCheck),
-]
-
-do {
-    for (name, test) in tests {
-        try test()
-        print("PASS: \(name)")
-    }
-} catch {
-    fputs("FAIL: \(error)\n", stderr)
-    exit(1)
+final class PinentryCompanionTests: XCTestCase {
+    func testAssuanEscaping() throws { try testAssuanEscapingRoundTrip() }
+    func testAssuanCommandParser() throws { try testAssuanCommandParsing() }
+    func testAssuanDataUsesByteBoundedLines() throws { try testAssuanDataChunking() }
+    func testAssuanCommandsUseByteBoundedLines() throws { try testAssuanCommandLineBounding() }
+    func testAssuanErrorParser() throws { try testAssuanErrorParsing() }
+    func testCacheIdentity() throws { try testKeychainIdentity() }
+    func testOptionsAndRetryDetection() throws { try testOptionsAndBadPassphraseRetry() }
+    func testAuthenticationReasonText() throws { try testAuthenticationReason() }
+    func testFallbackNames() throws { try testFallbackPinentryNames() }
+    func testKeychainPresenceStatusMapping() throws { try testKeychainPresenceMapping() }
+    func testAccessPolicyFlags() throws { try testKeychainAccessPolicyFlags() }
+    func testAccessPolicyCreation() throws { try testKeychainAccessPolicyCreatesAccessControl() }
+    func testGPGConfigPaths() throws { try testGPGAgentConfigPaths() }
+    func testGPGConfigParsingAndUpdate() throws { try testGPGAgentConfigParsingAndUpdate() }
+    func testGPGConfigAppendAndValidation() throws { try testGPGAgentConfigAppendAndValidation() }
+    func testRedaction() throws { try testDiagnosticRedaction() }
+    func testGETINFO() throws { try testPinentryInfo() }
+    func testProtocolCheck() throws { try testPinentryProtocolCheck() }
 }

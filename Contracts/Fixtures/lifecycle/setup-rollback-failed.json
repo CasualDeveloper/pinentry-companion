@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "operation": "setup",
+  "outcome": "error",
+  "changed": false,
+  "diagnostics": [
+    {
+      "code": "lifecycle.rollbackFailed",
+      "severity": "error",
+      "message": "The lifecycle operation failed and automatic rollback did not complete.",
+      "remediation": "Stop further mutations and inspect passive status before manual recovery."
+    }
+  ],
+  "state": {
+    "transactionState": "rollbackFailed",
+    "safety": "manualRecoveryRequired"
+  }
+}

@@ -2,21 +2,32 @@ import Darwin
 import Foundation
 
 enum ExecutableLookup {
-    static func find(_ name: String) -> String? {
+    static func find(
+        _ name: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        guard !name.contains("\0") else { return nil }
         if name.contains("/") {
-            return FileManager.default.isExecutableFile(atPath: name) ? name : nil
+            return isExecutableRegularFile(name) ? name : nil
         }
 
-        let paths = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+        let paths = (environment["PATH"] ?? "")
             .split(separator: ":")
             .map(String.init)
         let candidates = paths + ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
 
         for directory in candidates {
             let path = URL(fileURLWithPath: directory).appendingPathComponent(name).path
-            if FileManager.default.isExecutableFile(atPath: path) { return path }
+            if isExecutableRegularFile(path) { return path }
         }
         return nil
+    }
+
+    private static func isExecutableRegularFile(_ path: String) -> Bool {
+        var info = stat()
+        return stat(path, &info) == 0 &&
+            info.st_mode & S_IFMT == S_IFREG &&
+            Darwin.access(path, X_OK) == 0
     }
 
     static func findFirst(_ names: [String]) -> (name: String, path: String)? {

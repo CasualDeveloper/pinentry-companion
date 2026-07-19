@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/CasualDeveloper/pinentry-companion/main/Contracts/Schemas/plan-v1.schema.json",
+  "title": "pinentry-companion plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "component", "componentVersion", "operation", "outcome", "changed", "diagnostics", "state"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "component": { "const": "pinentry-companion" },
+    "componentVersion": { "type": "string", "minLength": 1 },
+    "operation": { "const": "plan" },
+    "outcome": { "enum": ["ok", "warning", "error", "conflict"] },
+    "changed": { "const": false },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "changeRequired", "gpgConfiguration", "disableKeychainPreference", "conflicts"],
+      "properties": {
+        "applicability": { "enum": ["ready", "blocked"] },
+        "changeRequired": { "type": "boolean" },
+        "gpgConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targetDisplayPath", "action", "beforeOccurrenceCount", "afterOccurrenceCount", "beforeValues", "afterValue", "requiresReload", "reloadAvailable", "reversible"],
+          "properties": {
+            "targetDisplayPath": { "type": "string" },
+            "action": { "$ref": "#/$defs/action" },
+            "beforeOccurrenceCount": { "type": "integer", "minimum": 0 },
+            "afterOccurrenceCount": { "type": "integer", "minimum": 0 },
+            "beforeValues": { "type": "array", "items": { "type": "string" } },
+            "afterValue": { "type": "string" },
+            "requiresReload": { "type": "boolean" },
+            "reloadAvailable": { "type": "boolean" },
+            "reversible": { "$ref": "#/$defs/reversibility" }
+          }
+        },
+        "disableKeychainPreference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["domain", "key", "action", "beforeState", "afterValue", "reversible"],
+          "properties": {
+            "domain": { "const": "org.gpgtools.common" },
+            "key": { "const": "DisableKeychain" },
+            "action": { "$ref": "#/$defs/action" },
+            "beforeState": { "enum": ["absent", "enabled", "disabled", "wrongType"] },
+            "afterValue": { "const": true },
+            "reversible": { "$ref": "#/$defs/reversibility" }
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "action": { "enum": ["none", "create", "add", "replace", "deduplicate", "set", "blocked"] },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string" },
+        "remediation": { "type": "string" }
+      }
+    },
+    "reversibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "reason"],
+      "properties": {
+        "supported": { "type": "boolean" },
+        "reason": { "enum": ["ownershipRecordAvailable", "ownershipRecordWillBeCreated", "ownershipRecordUnavailable", "ownershipRecordUnreadable"] }
+      }
+    }
+  }
+}

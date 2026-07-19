@@ -28,7 +28,7 @@ enum KeychainStoreError: Error, CustomStringConvertible, LocalizedError {
 }
 
 struct KeychainStore {
-    private static let accessControlledService = "pinentry-companion.acl"
+    private static let accessControlledService = PinentryCacheServices.accessControlled
 
     func contains(identity: KeychainIdentity) throws -> Bool {
         if try contains(identity: identity, service: Self.accessControlledService) { return true }
@@ -91,7 +91,11 @@ struct KeychainStore {
         var query = baseQuery(identity: identity, service: service)
         query[kSecMatchLimit] = kSecMatchLimitOne
         query[kSecReturnData] = true
-        if let reason { query[kSecUseOperationPrompt] = reason }
+        if let reason {
+            let context = LAContext()
+            context.localizedReason = reason
+            query[kSecUseAuthenticationContext] = context
+        }
 
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -166,6 +170,78 @@ struct KeychainStore {
 
 }
 
+enum PinentryCacheServices {
+    static let accessControlled = "pinentry-companion.acl"
+    static let all = [accessControlled, KeychainIdentity.service]
+}
+
+protocol KeychainServiceDeleting {
+    func deleteGenericPasswords(service: String) -> OSStatus
+}
+
+struct SecurityKeychainServiceDeleter: KeychainServiceDeleting {
+    func deleteGenericPasswords(service: String) -> OSStatus {
+        SecItemDelete([
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+        ] as CFDictionary)
+    }
+}
+
+struct KeychainCachePurgeResult: Equatable {
+    var serviceGroupsDeleted: Int
+    var serviceGroupsAlreadyEmpty: Int
+}
+
+struct KeychainCachePurgeFailure: Equatable {
+    var service: String
+    var status: OSStatus
+}
+
+enum KeychainCachePurgeError: Error, Equatable, CustomStringConvertible {
+    case failed([KeychainCachePurgeFailure])
+
+    var description: String {
+        switch self {
+        case .failed(let failures):
+            return failures.map { failure in
+                let detail = SecCopyErrorMessageString(failure.status, nil) as String?
+                    ?? "OSStatus \(failure.status)"
+                return "\(failure.service): \(detail)"
+            }.joined(separator: "; ")
+        }
+    }
+}
+
+struct KeychainCachePurger {
+    private let backend: any KeychainServiceDeleting
+
+    init(backend: any KeychainServiceDeleting = SecurityKeychainServiceDeleter()) {
+        self.backend = backend
+    }
+
+    func purge() throws -> KeychainCachePurgeResult {
+        var deleted = 0
+        var empty = 0
+        var failures: [KeychainCachePurgeFailure] = []
+        for service in PinentryCacheServices.all {
+            let status = backend.deleteGenericPasswords(service: service)
+            switch status {
+            case errSecSuccess: deleted += 1
+            case errSecItemNotFound: empty += 1
+            default: failures.append(KeychainCachePurgeFailure(service: service, status: status))
+            }
+        }
+        if !failures.isEmpty { throw KeychainCachePurgeError.failed(failures) }
+        return KeychainCachePurgeResult(
+            serviceGroupsDeleted: deleted,
+            serviceGroupsAlreadyEmpty: empty
+        )
+    }
+}
+
+extension KeychainStore: PassphraseCache {}
+
 public enum AuthenticatedKeychainCheck {
     public struct CheckResult {
         public var passed: Bool
@@ -223,6 +299,7 @@ public enum KeychainStorage {
         guard addStatus == errSecSuccess else {
             return CheckResult(passed: false, detail: "SecItemAdd failed: \(statusDescription(addStatus))")
         }
+        defer { _ = SecItemDelete(query as CFDictionary) }
 
         let deleteStatus = SecItemDelete(query as CFDictionary)
         guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
@@ -263,33 +340,32 @@ public enum KeychainAccessPolicy {
         public var detail: String
         public var missingEntitlement: Bool
 
-        public var isUnsignedBuildLimitation: Bool {
+        public var isUnentitledBuildLimitation: Bool {
             !canStore && missingEntitlement
         }
 
         public var userDetail: String {
-            if isUnsignedBuildLimitation { return Self.unsignedBuildDetail }
+            if isUnentitledBuildLimitation { return Self.unentitledBuildDetail }
             return detail
         }
 
         public var reportDetail: String {
-            if isUnsignedBuildLimitation { return "\(Self.unsignedBuildDetail); raw check: \(detail)" }
+            if isUnentitledBuildLimitation { return "\(Self.unentitledBuildDetail); raw check: \(detail)" }
             return detail
         }
 
-        public static let unsignedBuildDetail = "unavailable for unsigned/Homebrew builds; using app-level LocalAuthentication gate"
+        public static let unentitledBuildDetail = "unavailable without the required Keychain entitlement; using app-level LocalAuthentication gate"
     }
 
     public static var flags: SecAccessControlCreateFlags {
         if #available(macOS 15.0, *) {
-            return [companionFlag, .or, .biometryAny, .devicePasscode]
+            return [.companion, .or, .biometryAny, .devicePasscode]
         }
         return .userPresence
     }
 
-    public static var companionFlag: SecAccessControlCreateFlags {
-        SecAccessControlCreateFlags(rawValue: 1 << 5)
-    }
+    @available(macOS 15.0, *)
+    public static var companionFlag: SecAccessControlCreateFlags { .companion }
 
     public static var summary: String {
         if #available(macOS 15.0, *) {
@@ -301,7 +377,7 @@ public enum KeychainAccessPolicy {
     public static var storageCandidates: [Policy] {
         if #available(macOS 15.0, *) {
             return [
-                Policy(flags: [companionFlag, .or, .biometryAny, .devicePasscode], summary: "companion OR biometryAny OR devicePasscode", isPreferred: true),
+                Policy(flags: [.companion, .or, .biometryAny, .devicePasscode], summary: "companion OR biometryAny OR devicePasscode", isPreferred: true),
                 Policy(flags: .userPresence, summary: "userPresence", isPreferred: false),
             ]
         }
@@ -383,6 +459,7 @@ public enum KeychainAccessPolicy {
                     missingEntitlement: addStatus == errSecMissingEntitlement
                 )
             }
+            defer { _ = SecItemDelete(query as CFDictionary) }
 
             let deleteStatus = SecItemDelete(query as CFDictionary)
             guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "operation": "uninstall",
+  "outcome": "conflict",
+  "changed": false,
+  "diagnostics": [
+    {
+      "code": "lifecycle.uninstall.activeConfiguration",
+      "severity": "error",
+      "message": "The recorded original configuration still invokes the binary being removed.",
+      "remediation": "Configure a retained fallback pinentry, then retry uninstall preparation."
+    }
+  ],
+  "state": {
+    "transactionState": "notCommitted",
+    "safety": "noMutationCommitted"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "operation": "restore",
+  "outcome": "ok",
+  "changed": true,
+  "diagnostics": [
+    {
+      "code": "lifecycle.restore.applied",
+      "severity": "info",
+      "message": "Recorded GPG configuration was restored."
+    }
+  ],
+  "state": {
+    "transactionState": "restored",
+    "safety": "compareAndSwapVerified"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "operation": "setup",
+  "outcome": "ok",
+  "changed": false,
+  "diagnostics": [],
+  "state": {
+    "transactionState": "rollbackFailed",
+    "safety": "exactRestoreStateRecorded"
+  }
+}

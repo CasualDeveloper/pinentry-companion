@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "operation": "setup",
+  "outcome": "conflict",
+  "changed": false,
+  "diagnostics": [
+    {
+      "code": "lifecycle.foreignConfiguration",
+      "severity": "error",
+      "message": "A foreign pinentry-program directive blocks automatic ownership.",
+      "remediation": "Review the passive plan, then use --take-over only if replacement is intentional."
+    }
+  ],
+  "state": {
+    "transactionState": "notCommitted",
+    "safety": "noMutationCommitted"
+  }
+}

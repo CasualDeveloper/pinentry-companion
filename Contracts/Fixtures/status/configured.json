@@ -1,0 +1,46 @@
+{
+  "changed": false,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "diagnostics": [],
+  "operation": "status",
+  "outcome": "ok",
+  "schemaVersion": 1,
+  "state": {
+    "binary": {
+      "architecture": "arm64",
+      "flavor": "companion",
+      "invokedDisplayPath": "/opt/homebrew/bin/pinentry-companion",
+      "resolvedDisplayPath": "/opt/homebrew/Cellar/pinentry-companion/0.2.0/bin/pinentry-companion"
+    },
+    "cache": {
+      "inventory": "notProbed",
+      "serviceMode": "componentOwnedServices"
+    },
+    "dependencies": [
+      { "availability": "available", "displayPath": "/opt/homebrew/bin/gpgconf", "name": "gpgconf" },
+      { "availability": "available", "displayPath": "/opt/homebrew/bin/pinentry-mac", "name": "pinentry-mac" },
+      { "availability": "missing", "displayPath": "missing", "name": "pinentry-curses" },
+      { "availability": "missing", "displayPath": "missing", "name": "pinentry-tty" }
+    ],
+    "disableKeychainPreference": {
+      "domain": "org.gpgtools.common",
+      "key": "DisableKeychain",
+      "state": "enabled"
+    },
+    "gpgConfiguration": {
+      "alignment": "currentBinary",
+      "configDisplayPath": "~/.gnupg/gpg-agent.conf",
+      "drift": "notAssessable",
+      "homeDisplayPath": "~/.gnupg",
+      "ownership": "notTracked",
+      "pinentryProgramOccurrences": ["/opt/homebrew/bin/pinentry-companion"],
+      "presence": "readable",
+      "recoveryAvailable": false
+    },
+    "localAuthentication": {
+      "availability": "notProbed",
+      "policyMode": "companion/biometry, with device-owner fallback"
+    }
+  }
+}

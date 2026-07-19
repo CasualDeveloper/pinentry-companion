@@ -1,0 +1,64 @@
+{
+  "changed": false,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "diagnostics": [
+    {
+      "code": "gpg.configuration.missing",
+      "message": "The GPG agent configuration file is absent.",
+      "severity": "warning"
+    },
+    {
+      "code": "dependency.gpgconf.missing",
+      "message": "gpgconf is unavailable, so setup and restore cannot safely reload gpg-agent.",
+      "remediation": "Install GnuPG before changing lifecycle state.",
+      "severity": "warning"
+    },
+    {
+      "code": "dependency.fallbackPinentry.missing",
+      "message": "No supported fallback pinentry is available for uncached or unsupported prompts.",
+      "remediation": "Install pinentry-mac, pinentry-curses, or pinentry-tty.",
+      "severity": "error"
+    }
+  ],
+  "operation": "status",
+  "outcome": "error",
+  "schemaVersion": 1,
+  "state": {
+    "binary": {
+      "architecture": "arm64",
+      "flavor": "companion",
+      "invokedDisplayPath": "/opt/homebrew/bin/pinentry-companion",
+      "resolvedDisplayPath": "/opt/homebrew/bin/pinentry-companion"
+    },
+    "cache": {
+      "inventory": "notProbed",
+      "serviceMode": "componentOwnedServices"
+    },
+    "dependencies": [
+      { "availability": "missing", "displayPath": "missing", "name": "gpgconf" },
+      { "availability": "missing", "displayPath": "missing", "name": "pinentry-mac" },
+      { "availability": "missing", "displayPath": "missing", "name": "pinentry-curses" },
+      { "availability": "missing", "displayPath": "missing", "name": "pinentry-tty" }
+    ],
+    "disableKeychainPreference": {
+      "domain": "org.gpgtools.common",
+      "key": "DisableKeychain",
+      "state": "absent"
+    },
+    "gpgConfiguration": {
+      "alignment": "missing",
+      "configDisplayPath": "~/.gnupg/gpg-agent.conf",
+      "drift": "notAssessable",
+      "homeDisplayPath": "~/.gnupg",
+      "ownership": "notTracked",
+      "pinentryProgramOccurrences": [],
+      "presence": "missing",
+      "recoveryAvailable": false
+    },
+    "localAuthentication": {
+      "availability": "notProbed",
+      "policyMode": "companion/biometry, with device-owner fallback"
+    }
+  }
+}

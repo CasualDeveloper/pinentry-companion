@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/CasualDeveloper/pinentry-companion/main/Contracts/Schemas/status-v1.schema.json",
+  "title": "pinentry-companion status v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "component", "componentVersion", "operation", "outcome", "changed", "diagnostics", "state"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "component": { "const": "pinentry-companion" },
+    "componentVersion": { "type": "string", "minLength": 1 },
+    "operation": { "const": "status" },
+    "outcome": { "enum": ["ok", "warning", "error"] },
+    "changed": { "const": false },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary", "gpgConfiguration", "dependencies", "localAuthentication", "cache", "disableKeychainPreference"],
+      "properties": {
+        "binary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["flavor", "architecture", "invokedDisplayPath", "resolvedDisplayPath"],
+          "properties": {
+            "flavor": { "const": "companion" },
+            "architecture": { "enum": ["arm64", "x86_64", "unknown"] },
+            "invokedDisplayPath": { "type": "string" },
+            "resolvedDisplayPath": { "type": "string" }
+          }
+        },
+        "gpgConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["homeDisplayPath", "configDisplayPath", "presence", "pinentryProgramOccurrences", "alignment", "ownership", "drift", "recoveryAvailable"],
+          "properties": {
+            "homeDisplayPath": { "type": "string" },
+            "configDisplayPath": { "type": "string" },
+            "presence": { "enum": ["missing", "readable", "unreadable"] },
+            "pinentryProgramOccurrences": { "type": "array", "items": { "type": "string" } },
+            "alignment": { "enum": ["currentBinary", "otherBinary", "missing", "ambiguous", "unknown"] },
+            "ownership": { "enum": ["notTracked", "managed", "released", "transactionIncomplete", "unreadable"] },
+            "drift": { "enum": ["notAssessable", "inSync", "drifted", "transactionIncomplete", "unreadable"] },
+            "recoveryAvailable": { "type": "boolean" }
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "availability", "displayPath"],
+            "properties": {
+              "name": { "type": "string" },
+              "availability": { "enum": ["available", "missing"] },
+              "displayPath": { "type": "string" }
+            }
+          }
+        },
+        "localAuthentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policyMode", "availability"],
+          "properties": {
+            "policyMode": { "type": "string" },
+            "availability": { "const": "notProbed" }
+          }
+        },
+        "cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["serviceMode", "inventory"],
+          "properties": {
+            "serviceMode": { "const": "componentOwnedServices" },
+            "inventory": { "const": "notProbed" }
+          }
+        },
+        "disableKeychainPreference": { "$ref": "#/$defs/preferenceStatus" }
+      }
+    }
+  },
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string" },
+        "remediation": { "type": "string" }
+      }
+    },
+    "preferenceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "key", "state"],
+      "properties": {
+        "domain": { "const": "org.gpgtools.common" },
+        "key": { "const": "DisableKeychain" },
+        "state": { "enum": ["absent", "enabled", "disabled", "wrongType"] }
+      }
+    }
+  }
+}

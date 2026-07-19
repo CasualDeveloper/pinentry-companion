@@ -1,0 +1,45 @@
+{
+  "changed": false,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "diagnostics": [
+    {
+      "code": "gpg.configuration.foreignPinentry",
+      "message": "A foreign pinentry-program directive blocks an automatic plan.",
+      "remediation": "Review the existing directive before explicitly taking ownership.",
+      "severity": "error"
+    }
+  ],
+  "operation": "plan",
+  "outcome": "conflict",
+  "schemaVersion": 1,
+  "state": {
+    "applicability": "blocked",
+    "changeRequired": true,
+    "conflicts": [
+      {
+        "code": "foreignPinentryProgram",
+        "message": "The active pinentry-program does not resolve to this binary."
+      }
+    ],
+    "disableKeychainPreference": {
+      "action": "set",
+      "afterValue": true,
+      "beforeState": "disabled",
+      "domain": "org.gpgtools.common",
+      "key": "DisableKeychain",
+      "reversible": { "reason": "ownershipRecordWillBeCreated", "supported": true }
+    },
+    "gpgConfiguration": {
+      "action": "blocked",
+      "afterOccurrenceCount": 1,
+      "afterValue": "/opt/homebrew/bin/pinentry-companion",
+      "beforeOccurrenceCount": 1,
+      "beforeValues": ["/usr/local/bin/foreign-pinentry"],
+      "reloadAvailable": true,
+      "requiresReload": true,
+      "reversible": { "reason": "ownershipRecordWillBeCreated", "supported": true },
+      "targetDisplayPath": "~/.gnupg/gpg-agent.conf"
+    }
+  }
+}

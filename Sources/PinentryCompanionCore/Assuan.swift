@@ -46,6 +46,14 @@ public enum Assuan {
     }
 
     public static func parse(_ line: String) throws -> Command? {
+        guard line.utf8.count < maxLineLength else {
+            throw ProtocolError(
+                source: .assuan,
+                code: .invalidValue,
+                sourceName: "assuan",
+                message: "IPC line exceeds the 1000-byte protocol limit"
+            )
+        }
         if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
         if line.hasPrefix("#") || line.hasPrefix("S ") { return nil }
 
@@ -56,11 +64,7 @@ public enum Assuan {
     }
 
     public static func escape(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "%", with: "%25")
-            .replacingOccurrences(of: "\\", with: "%5C")
-            .replacingOccurrences(of: "\r", with: "%0D")
-            .replacingOccurrences(of: "\n", with: "%0A")
+        escapedTokens(value).joined()
     }
 
     public static func unescape(_ value: String) throws -> String {
@@ -76,12 +80,23 @@ public enum Assuan {
     }
 
     static func writeLine(_ command: String, _ parameters: String = "") {
-        var line = command.uppercased()
-        if !parameters.isEmpty {
-            line += " " + escape(parameters)
+        FileHandle.standardOutput.write(Data(encodedLine(command, parameters).utf8))
+    }
+
+    static func encodedLine(_ command: String, _ parameters: String = "") -> String {
+        let command = command.uppercased()
+        guard !parameters.isEmpty else { return "\(command)\n" }
+
+        let maximumPayloadBytes = max(0, maxLineLength - command.utf8.count - 2)
+        var payload = ""
+        var payloadBytes = 0
+        for token in escapedTokens(parameters) {
+            let tokenBytes = token.utf8.count
+            guard payloadBytes + tokenBytes <= maximumPayloadBytes else { break }
+            payload += token
+            payloadBytes += tokenBytes
         }
-        line += "\n"
-        FileHandle.standardOutput.write(Data(line.utf8))
+        return payload.isEmpty ? "\(command)\n" : "\(command) \(payload)\n"
     }
 
     static func writeError(_ error: ProtocolError) {
@@ -119,13 +134,40 @@ public enum Assuan {
     }
 
     static func writeData(_ value: String) {
-        let encoded = escape(value)
-        let chunkLength = maxLineLength - 3
-        var index = encoded.startIndex
-        while index < encoded.endIndex {
-            let end = encoded.index(index, offsetBy: chunkLength, limitedBy: encoded.endIndex) ?? encoded.endIndex
-            FileHandle.standardOutput.write(Data("D \(encoded[index..<end])\n".utf8))
-            index = end
+        for line in dataLines(value) {
+            FileHandle.standardOutput.write(Data("\(line)\n".utf8))
+        }
+    }
+
+    static func dataLines(_ value: String) -> [String] {
+        let maximumPayloadBytes = maxLineLength - 3
+        var lines: [String] = []
+        var payload = ""
+        var payloadBytes = 0
+
+        for token in escapedTokens(value) {
+            let tokenBytes = token.utf8.count
+            if payloadBytes + tokenBytes > maximumPayloadBytes, !payload.isEmpty {
+                lines.append("D \(payload)")
+                payload = ""
+                payloadBytes = 0
+            }
+            payload += token
+            payloadBytes += tokenBytes
+        }
+        if !payload.isEmpty { lines.append("D \(payload)") }
+        return lines
+    }
+
+    private static func escapedTokens(_ value: String) -> [String] {
+        value.unicodeScalars.map { scalar in
+            switch scalar.value {
+            case 0x25: return "%25"
+            case 0x5C: return "%5C"
+            case 0x0D: return "%0D"
+            case 0x0A: return "%0A"
+            default: return String(scalar)
+            }
         }
     }
 }

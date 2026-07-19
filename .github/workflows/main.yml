@@ -14,8 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # GitHub-hosted macOS runners currently cover 26, 15, and 14.
-          # Older supported deployment targets require self-hosted/manual VMs.
+          # macOS 14 is the production deployment floor for pinentry-companion.
           - name: macOS 26 Tahoe
             runner: macos-26
           - name: macOS 15 Sequoia
@@ -24,7 +23,7 @@ jobs:
             runner: macos-14
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Runner versions
         run: |
@@ -33,19 +32,67 @@ jobs:
           swift --version
 
       - name: Build native release binary
-        run: swift build -c release --product pinentry-companion
+        run: |
+          swift build -c release --product pinentry-companion \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+          native_bin_path="$(swift build -c release --show-bin-path)/pinentry-companion"
+          test -x "$native_bin_path"
+          printf 'PINENTRY_NATIVE_BIN=%s\n' "$native_bin_path" >> "$GITHUB_ENV"
 
       - name: Build release binaries for supported architectures
         run: |
-          swift build -c release --arch arm64 --product pinentry-companion
-          swift build -c release --arch x86_64 --product pinentry-companion
+          swift build -c release --arch arm64 --product pinentry-companion \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+          swift build -c release --arch x86_64 --product pinentry-companion \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
 
       - name: Test
-        run: swift run PinentryCompanionUnitTests
+        run: |
+          swift test \
+            -Xswiftc -warnings-as-errors \
+            -Xswiftc -strict-concurrency=complete
+
+      - name: Validate machine contracts
+        run: python3 Scripts/validate-contracts.py
+
+      - name: Validate live passive contracts
+        run: |
+          set -euo pipefail
+          fixture_root="$(mktemp -d)"
+          trap 'rm -rf "$fixture_root"' EXIT
+          export GNUPGHOME="$fixture_root/gnupg"
+
+          set +e
+          "$PINENTRY_NATIVE_BIN" status --format json > "$fixture_root/status.json"
+          status_exit=$?
+          "$PINENTRY_NATIVE_BIN" plan --format json > "$fixture_root/plan.json"
+          plan_exit=$?
+          "$PINENTRY_NATIVE_BIN" setup --format json \
+            > "$fixture_root/lifecycle.json" \
+            2> "$fixture_root/lifecycle.stderr"
+          lifecycle_exit=$?
+          set -e
+
+          test "$status_exit" -eq 0 -o "$status_exit" -eq 1
+          test "$plan_exit" -eq 0 -o "$plan_exit" -eq 1
+          test "$lifecycle_exit" -eq 2
+          test ! -s "$fixture_root/lifecycle.stderr"
+          python3 Scripts/validate-contracts.py \
+            --status "$fixture_root/status.json" \
+            --plan "$fixture_root/plan.json" \
+            --lifecycle "$fixture_root/lifecycle.json"
+          test ! -e "$GNUPGHOME"
 
       - name: Protocol smoke test
         run: |
-          output="$(printf 'NOP\nHELP\nBYE\n' | .build/release/pinentry-companion)"
+          version="$("$PINENTRY_NATIVE_BIN" --version | awk '{print $2}')"
+          output="$(printf 'NOP\nHELP\nGETINFO flavor\nGETINFO version\nBYE\n' | "$PINENTRY_NATIVE_BIN")"
           printf '%s\n' "$output"
           grep -q 'OK Hi from pinentry-companion!' <<< "$output"
           grep -q '# GETPIN' <<< "$output"
+          grep -q '^D companion$' <<< "$output"
+          grep -q "^D ${version}$" <<< "$output"
+          ! grep -q '^ERR ' <<< "$output"

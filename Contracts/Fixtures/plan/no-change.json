@@ -1,0 +1,33 @@
+{
+  "changed": false,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "diagnostics": [],
+  "operation": "plan",
+  "outcome": "ok",
+  "schemaVersion": 1,
+  "state": {
+    "applicability": "ready",
+    "changeRequired": false,
+    "conflicts": [],
+    "disableKeychainPreference": {
+      "action": "none",
+      "afterValue": true,
+      "beforeState": "enabled",
+      "domain": "org.gpgtools.common",
+      "key": "DisableKeychain",
+      "reversible": { "reason": "ownershipRecordWillBeCreated", "supported": true }
+    },
+    "gpgConfiguration": {
+      "action": "none",
+      "afterOccurrenceCount": 1,
+      "afterValue": "/opt/homebrew/bin/pinentry-companion",
+      "beforeOccurrenceCount": 1,
+      "beforeValues": ["/opt/homebrew/bin/pinentry-companion"],
+      "reloadAvailable": true,
+      "requiresReload": false,
+      "reversible": { "reason": "ownershipRecordWillBeCreated", "supported": true },
+      "targetDisplayPath": "~/.gnupg/gpg-agent.conf"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "component": "pinentry-companion",
+  "componentVersion": "0.2.0",
+  "operation": "setup",
+  "outcome": "error",
+  "changed": false,
+  "diagnostics": [
+    {
+      "code": "invocation.confirmationRequired",
+      "severity": "error",
+      "message": "Machine lifecycle mutations require the literal --yes option.",
+      "remediation": "Use the documented canonical argument sequence after reviewing the passive plan."
+    }
+  ],
+  "state": {
+    "transactionState": "notCommitted",
+    "safety": "noMutationCommitted"
+  }
+}

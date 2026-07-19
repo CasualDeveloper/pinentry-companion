@@ -2,8 +2,6 @@ import Foundation
 import LocalAuthentication
 
 struct LocalAuthenticator {
-    private static let biometricsOrCompanionPolicy = LAPolicy(rawValue: 4)!
-
     static var summary: String {
         if #available(macOS 15.0, *) {
             return "companion/biometry, with device-owner fallback"
@@ -14,7 +12,10 @@ struct LocalAuthenticator {
     func canAuthenticate() -> Bool {
         let context = LAContext()
         var error: NSError?
-        if #available(macOS 15.0, *), context.canEvaluatePolicy(Self.biometricsOrCompanionPolicy, error: &error) {
+        if #available(macOS 15.0, *), context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometricsOrCompanion,
+            error: &error
+        ) {
             return true
         }
         return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
@@ -25,9 +26,10 @@ struct LocalAuthenticator {
             let context = LAContext()
             context.localizedFallbackTitle = "Use Password"
             var error: NSError?
-            if context.canEvaluatePolicy(Self.biometricsOrCompanionPolicy, error: &error) {
+            let policy = LAPolicy.deviceOwnerAuthenticationWithBiometricsOrCompanion
+            if context.canEvaluatePolicy(policy, error: &error) {
                 do {
-                    try evaluate(context: context, policy: Self.biometricsOrCompanionPolicy, reason: reason)
+                    try evaluate(context: context, policy: policy, reason: reason)
                     return
                 } catch let error as LAError where error.code == .userFallback {
                     try authenticateDeviceOwner(reason: reason)
