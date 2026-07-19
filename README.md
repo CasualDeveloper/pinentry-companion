@@ -15,7 +15,7 @@ Native macOS GPG pinentry with Apple Watch/companion unlock, Touch ID, macOS pas
 ## Features
 
 - Native Swift implementation
-- Keychain unlock with Apple Watch/companion support on macOS 15+, plus Touch ID and the macOS account password on supported Macs
+- Keychain unlock with Apple Watch/companion support, plus Touch ID and the macOS account password on supported Macs
 - `pinentry-mac` fallback for first-time passphrase entry and unsupported flows, with `pinentry-curses`/`pinentry-tty` fallback if needed
 - Stale Keychain entry repair when GPG reports a bad passphrase retry
 - Transactional, reversible setup with exact compare-and-swap drift checks
@@ -28,7 +28,7 @@ Native macOS GPG pinentry with Apple Watch/companion unlock, Touch ID, macOS pas
 
 This tool optimizes local convenience for macOS GPG users. It stores the GPG key passphrase in the macOS login Keychain as a `ThisDeviceOnly` item and requires macOS local authentication before reading it.
 
-On macOS 15 and later, unlock attempts use LocalAuthentication companion/biometry policy where available, allowing supported companion devices such as Apple Watch or Touch ID, with device-owner authentication fallback for the macOS account password. Older macOS versions use device-owner authentication.
+On every supported macOS release, unlock attempts use the LocalAuthentication Watch/companion and biometry policy where available, allowing Apple Watch or Touch ID, with device-owner authentication fallback for the macOS account password. Apple renamed the Watch APIs to Companion in the macOS 15 SDK without changing their underlying policy values.
 
 Keychain-enforced companion ACL storage requires a build with the required Keychain entitlement; an ad hoc signature is not sufficient. The explicit `pinentry-companion doctor auth` check reports this as informational when ACL storage is unavailable for unentitled builds, including ordinary source/Homebrew builds. When ACL storage is available, new cached entries are stored under an ACL-protected Keychain service and macOS enforces authentication on read. Unentitled builds fall back to the app-level LocalAuthentication gate described above. Ordinary `doctor` and `doctor report` remain passive; only `doctor auth` creates temporary diagnostic Keychain items.
 

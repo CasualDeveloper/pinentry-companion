@@ -29,4 +29,5 @@
 ### Changed
 
 - The production deployment floor is macOS 14, matching the tested CI matrix.
+- Apple Watch/companion and Touch ID authentication use the same stable policy values across every supported macOS SDK and runtime.
 - Release tags must exactly match the component's intrinsic version.
