@@ -56,9 +56,10 @@ Use a disposable macOS account or VM with a passphrase-protected test GPG key. F
 
 Do not substitute a changed `HOME`, `CFFIXED_USER_HOME`, `GNUPGHOME`, or an isolated Homebrew prefix for the separate account or VM. `CFPreferences` can still communicate with the logged-in user's `cfprefsd`, and the Keychain and LocalAuthentication checks remain account-scoped. Those environment changes are useful for non-mutating package checks only, not for lifecycle or authentication tests.
 
+Leave Homebrew's package API enabled. Disabling it on an API-only Homebrew installation can trigger an unrelated full clone of `homebrew/core`; the checked-out custom tap formula still takes precedence over API metadata.
+
 ```sh
-HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_FROM_API=1 \
-  brew install CasualDeveloper/tap/pinentry-companion
+HOMEBREW_NO_AUTO_UPDATE=1 brew install CasualDeveloper/tap/pinentry-companion
 brew test CasualDeveloper/tap/pinentry-companion
 ```
 
