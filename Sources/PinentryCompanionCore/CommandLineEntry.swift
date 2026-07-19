@@ -3,7 +3,7 @@ import Darwin
 
 public enum CommandLineEntry {
     public static func run() -> Never {
-        let args = Array(CommandLine.arguments.dropFirst())
+        let args = Array(ProcessInfo.processInfo.arguments.dropFirst())
 
         if args == ["--version"] {
             printOutput("pinentry-companion \(ComponentVersion.current)")

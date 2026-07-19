@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 import XCTest
 @testable import PinentryCompanionCore
@@ -205,16 +206,17 @@ func testKeychainPresenceMapping() throws {
 func testKeychainAccessPolicyFlags() throws {
     let flags = KeychainAccessPolicy.flags
 
-    if #available(macOS 15.0, *) {
-        try expect(flags.contains(.biometryAny), "Keychain access policy should include biometryAny on macOS 15+")
-        try expect(flags.contains(.devicePasscode), "Keychain access policy should include devicePasscode on macOS 15+")
-        try expect(flags.contains(.or), "Keychain access policy should combine macOS 15+ constraints with OR")
-        try expect(flags.contains(KeychainAccessPolicy.companionFlag), "Keychain access policy should include companion on macOS 15+")
-        try expect(KeychainAccessPolicy.summary == "companion OR biometryAny OR devicePasscode", "Keychain access policy summary mismatch")
-    } else {
-        try expect(flags.contains(.userPresence), "Legacy Keychain access policy should include userPresence")
-        try expect(KeychainAccessPolicy.summary == "userPresence", "Legacy Keychain access policy summary mismatch")
-    }
+    try expect(flags.contains(.biometryAny), "Keychain access policy should include biometryAny")
+    try expect(flags.contains(.devicePasscode), "Keychain access policy should include devicePasscode")
+    try expect(flags.contains(.or), "Keychain access policy should combine constraints with OR")
+    try expect(flags.contains(KeychainAccessPolicy.companionFlag), "Keychain access policy should include companion")
+    try expect(KeychainAccessPolicy.companionFlag.rawValue == 1 << 5, "Companion Keychain constraint raw value mismatch")
+    try expect(KeychainAccessPolicy.summary == "companion OR biometryAny OR devicePasscode", "Keychain access policy summary mismatch")
+}
+
+func testLocalAuthenticatorPolicy() throws {
+    try expect(LocalAuthenticator.companionOrBiometricsPolicy.rawValue == 4, "Companion LocalAuthentication policy raw value mismatch")
+    try expect(LocalAuthenticator.summary == "companion/biometry, with device-owner fallback", "LocalAuthentication policy summary mismatch")
 }
 
 func testKeychainAccessPolicyCreatesAccessControl() throws {
@@ -361,6 +363,7 @@ final class PinentryCompanionTests: XCTestCase {
     func testKeychainPresenceStatusMapping() throws { try testKeychainPresenceMapping() }
     func testAccessPolicyFlags() throws { try testKeychainAccessPolicyFlags() }
     func testAccessPolicyCreation() throws { try testKeychainAccessPolicyCreatesAccessControl() }
+    func testCompanionAuthenticationPolicy() throws { try testLocalAuthenticatorPolicy() }
     func testGPGConfigPaths() throws { try testGPGAgentConfigPaths() }
     func testGPGConfigParsingAndUpdate() throws { try testGPGAgentConfigParsingAndUpdate() }
     func testGPGConfigAppendAndValidation() throws { try testGPGAgentConfigAppendAndValidation() }

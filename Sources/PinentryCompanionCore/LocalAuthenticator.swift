@@ -2,18 +2,23 @@ import Foundation
 import LocalAuthentication
 
 struct LocalAuthenticator {
-    static var summary: String {
-        if #available(macOS 15.0, *) {
-            return "companion/biometry, with device-owner fallback"
+    // Apple renamed the macOS 10.15+ Watch policy to "Companion" in the
+    // macOS 15 SDK without changing its raw value. Constructing it by value
+    // keeps the source compatible with both SDK generations.
+    static var companionOrBiometricsPolicy: LAPolicy {
+        guard let policy = LAPolicy(rawValue: 4) else {
+            preconditionFailure("LocalAuthentication policy 4 is unavailable")
         }
-        return "device-owner authentication"
+        return policy
     }
+
+    static let summary = "companion/biometry, with device-owner fallback"
 
     func canAuthenticate() -> Bool {
         let context = LAContext()
         var error: NSError?
-        if #available(macOS 15.0, *), context.canEvaluatePolicy(
-            .deviceOwnerAuthenticationWithBiometricsOrCompanion,
+        if context.canEvaluatePolicy(
+            Self.companionOrBiometricsPolicy,
             error: &error
         ) {
             return true
@@ -22,19 +27,17 @@ struct LocalAuthenticator {
     }
 
     func authenticate(reason: String) throws {
-        if #available(macOS 15.0, *) {
-            let context = LAContext()
-            context.localizedFallbackTitle = "Use Password"
-            var error: NSError?
-            let policy = LAPolicy.deviceOwnerAuthenticationWithBiometricsOrCompanion
-            if context.canEvaluatePolicy(policy, error: &error) {
-                do {
-                    try evaluate(context: context, policy: policy, reason: reason)
-                    return
-                } catch let error as LAError where error.code == .userFallback {
-                    try authenticateDeviceOwner(reason: reason)
-                    return
-                }
+        let context = LAContext()
+        context.localizedFallbackTitle = "Use Password"
+        var error: NSError?
+        let policy = Self.companionOrBiometricsPolicy
+        if context.canEvaluatePolicy(policy, error: &error) {
+            do {
+                try evaluate(context: context, policy: policy, reason: reason)
+                return
+            } catch let error as LAError where error.code == .userFallback {
+                try authenticateDeviceOwner(reason: reason)
+                return
             }
         }
 

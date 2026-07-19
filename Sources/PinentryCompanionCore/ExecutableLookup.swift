@@ -85,7 +85,7 @@ enum ExecutableLookup {
     }
 
     private static func exec(path: String, name: String) throws -> Never {
-        let args = CommandLine.arguments.map { strdup($0) } + [nil]
+        let args = ProcessInfo.processInfo.arguments.map { strdup($0) } + [nil]
         defer { args.compactMap { $0 }.forEach { free($0) } }
 
         let argv = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: args.count)

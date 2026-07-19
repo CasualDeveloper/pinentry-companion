@@ -358,30 +358,23 @@ public enum KeychainAccessPolicy {
     }
 
     public static var flags: SecAccessControlCreateFlags {
-        if #available(macOS 15.0, *) {
-            return [.companion, .or, .biometryAny, .devicePasscode]
-        }
-        return .userPresence
+        [companionFlag, .or, .biometryAny, .devicePasscode]
     }
 
-    @available(macOS 15.0, *)
-    public static var companionFlag: SecAccessControlCreateFlags { .companion }
-
-    public static var summary: String {
-        if #available(macOS 15.0, *) {
-            return "companion OR biometryAny OR devicePasscode"
-        }
-        return "userPresence"
+    // Apple renamed the macOS 10.15+ Watch constraint to "Companion" in the
+    // macOS 15 SDK without changing its bit. Use the stable value so builds
+    // work with both the macOS 14 and macOS 15+ SDK declarations.
+    public static var companionFlag: SecAccessControlCreateFlags {
+        SecAccessControlCreateFlags(rawValue: 1 << 5)
     }
+
+    public static let summary = "companion OR biometryAny OR devicePasscode"
 
     public static var storageCandidates: [Policy] {
-        if #available(macOS 15.0, *) {
-            return [
-                Policy(flags: [.companion, .or, .biometryAny, .devicePasscode], summary: "companion OR biometryAny OR devicePasscode", isPreferred: true),
-                Policy(flags: .userPresence, summary: "userPresence", isPreferred: false),
-            ]
-        }
-        return [Policy(flags: .userPresence, summary: "userPresence", isPreferred: true)]
+        [
+            Policy(flags: flags, summary: summary, isPreferred: true),
+            Policy(flags: .userPresence, summary: "userPresence", isPreferred: false),
+        ]
     }
 
     public static func accessControl() throws -> SecAccessControl {

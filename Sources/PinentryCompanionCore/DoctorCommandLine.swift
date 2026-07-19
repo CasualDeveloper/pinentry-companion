@@ -275,7 +275,7 @@ extension CommandLineEntry {
     }
 
     static func currentExecutablePath() -> String {
-        let invoked = CommandLine.arguments.first ?? "pinentry-companion"
+        let invoked = ProcessInfo.processInfo.arguments.first ?? "pinentry-companion"
         if invoked.contains("/") {
             return URL(fileURLWithPath: invoked, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
                 .standardizedFileURL
