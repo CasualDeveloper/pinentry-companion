@@ -26,7 +26,13 @@ Download the draft-release assets and run the verification and both disposable-m
 gh release edit v0.2.0 --draft=false --repo CasualDeveloper/pinentry-companion
 ```
 
-Manual workflow runs accept a branch, commit, or tag but only upload an expiring candidate artifact. They never create a tag or release. The tag workflow creates a draft release only; publication is always a separate approval-controlled action.
+Manual workflow runs build the branch or existing tag selected as the workflow run ref and only upload an expiring candidate artifact. They never create a tag or release. The single run ref is also the source identity recorded by GitHub's provenance attestation, so do not add a second checkout-ref input. The tag workflow creates a draft release only; publication is always a separate approval-controlled action.
+
+For example, build the current `main` commit with:
+
+```sh
+gh workflow run release.yml --ref main
+```
 
 ## Verify
 
