@@ -36,6 +36,78 @@ final class LifecycleManagerTests: XCTestCase {
         XCTAssertEqual(fixture.agent.reloadCount, reloadCount)
     }
 
+    func testSetupPreservesConfigurationChangedAfterPreparingTransaction() throws {
+        let fixture = Fixture()
+        fixture.target.home = .directory(mode: 0o700)
+        fixture.target.config = .file(data: Data("# original\n".utf8), mode: 0o600)
+        let intervening = LifecycleFileState.file(
+            data: Data("# edited while setup was preparing\n".utf8),
+            mode: 0o600
+        )
+        fixture.state.onSave = { _, call in
+            if call == 1 { fixture.target.config = intervening }
+        }
+
+        XCTAssertThrowsError(try fixture.manager.setup(fixture.request())) { error in
+            XCTAssertEqual(error as? LifecycleError, .drift("gpg-agent.conf"))
+        }
+        XCTAssertEqual(fixture.target.config, intervening)
+        XCTAssertTrue(fixture.target.operations.isEmpty)
+        XCTAssertTrue(fixture.preference.operations.isEmpty)
+        XCTAssertEqual(fixture.agent.reloadCount, 0)
+        XCTAssertNil(fixture.state.current)
+    }
+
+    func testSetupPreservesPreferenceChangedAfterPreparingTransaction() throws {
+        let fixture = Fixture()
+        fixture.target.home = .directory(mode: 0o700)
+        fixture.target.config = .file(data: Data("# original\n".utf8), mode: 0o600)
+        fixture.preference.state = .absent
+        fixture.state.onSave = { _, call in
+            if call == 1 { fixture.preference.state = .boolean(false) }
+        }
+
+        XCTAssertThrowsError(try fixture.manager.setup(fixture.request())) { error in
+            XCTAssertEqual(error as? LifecycleError, .drift("DisableKeychain"))
+        }
+        XCTAssertEqual(fixture.preference.state, .boolean(false))
+        XCTAssertTrue(fixture.target.operations.isEmpty)
+        XCTAssertTrue(fixture.preference.operations.isEmpty)
+        XCTAssertEqual(fixture.agent.reloadCount, 0)
+        XCTAssertNil(fixture.state.current)
+    }
+
+    func testRejectedManagedUpgradeRestoresPreviousLifecycleRecord() throws {
+        let fixture = Fixture()
+        XCTAssertEqual(try fixture.manager.setup(fixture.request()), .changed)
+        let previousRecord = try XCTUnwrap(fixture.state.current)
+        let operationCount = fixture.target.operations.count
+        let preferenceOperationCount = fixture.preference.operations.count
+        let reloadCount = fixture.agent.reloadCount
+        let intervening = LifecycleFileState.file(
+            data: Data("# edited during upgrade\n".utf8),
+            mode: 0o600
+        )
+        let nextSave = fixture.state.saveCallCount + 1
+        fixture.state.onSave = { _, call in
+            if call == nextSave { fixture.target.config = intervening }
+        }
+        let upgraded = fixture.request(
+            invokedPath: "/opt/homebrew/bin/pinentry-companion",
+            resolvedPath: "/opt/homebrew/Cellar/pinentry-companion/0.3.0/bin/pinentry-companion",
+            digest: String(repeating: "b", count: 64)
+        )
+
+        XCTAssertThrowsError(try fixture.manager.setup(upgraded)) { error in
+            XCTAssertEqual(error as? LifecycleError, .drift("gpg-agent.conf"))
+        }
+        XCTAssertEqual(fixture.target.config, intervening)
+        XCTAssertEqual(fixture.target.operations.count, operationCount)
+        XCTAssertEqual(fixture.preference.operations.count, preferenceOperationCount)
+        XCTAssertEqual(fixture.agent.reloadCount, reloadCount)
+        XCTAssertEqual(fixture.state.current, previousRecord)
+    }
+
     func testForeignPinentryRequiresExplicitTakeover() throws {
         let fixture = Fixture()
         fixture.target.config = .file(
@@ -552,6 +624,7 @@ private final class RecordingStateStore: LifecycleStatePersisting {
     var current: LifecycleRecord? { records.last }
     var failOnSaveCalls: Set<Int> = []
     var saveCallCount = 0
+    var onSave: ((LifecycleRecord, Int) -> Void)?
 
     func load(canonicalHomePath: String) throws -> LifecycleRecord? { current }
     func loadAll() throws -> [LifecycleRecord] { current.map { [$0] } ?? [] }
@@ -561,6 +634,11 @@ private final class RecordingStateStore: LifecycleStatePersisting {
             throw LifecycleTestFailure("state save failed")
         }
         records.append(record)
+        onSave?(record, saveCallCount)
+    }
+
+    func remove(canonicalHomePath: String) throws {
+        records.removeAll { $0.canonicalHomePath == canonicalHomePath }
     }
 }
 
@@ -581,6 +659,10 @@ private final class SuiteStateStore: LifecycleStatePersisting {
 
     func save(_ record: LifecycleRecord) throws {
         recordsByHome[record.canonicalHomePath] = record
+    }
+
+    func remove(canonicalHomePath: String) throws {
+        recordsByHome[canonicalHomePath] = nil
     }
 }
 

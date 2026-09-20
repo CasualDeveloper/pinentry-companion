@@ -76,6 +76,24 @@ final class LifecycleStateTests: XCTestCase {
         ]))
     }
 
+    func testStateStoreRemovesOnlyTheRequestedRecord() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = LifecycleStateStore(rootURL: fixture.root.appendingPathComponent("state-v1"))
+        let first = makeRecord()
+        var second = makeRecord()
+        second.canonicalHomePath = "/Users/example/.gnupg-work"
+        second.configPath = "/Users/example/.gnupg-work/gpg-agent.conf"
+        try store.save(first)
+        try store.save(second)
+
+        try store.remove(canonicalHomePath: first.canonicalHomePath)
+
+        XCTAssertNil(try store.load(canonicalHomePath: first.canonicalHomePath))
+        XCTAssertEqual(try store.load(canonicalHomePath: second.canonicalHomePath), second)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.rootURL.path))
+    }
+
     func testStateStoreRefusesSymlinkedStateDirectory() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

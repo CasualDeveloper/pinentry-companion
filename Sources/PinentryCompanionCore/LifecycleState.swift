@@ -69,6 +69,29 @@ struct LifecycleStateStore: LifecycleStatePersisting {
         try atomicWrite(data, to: url)
     }
 
+    func remove(canonicalHomePath: String) throws {
+        guard effectiveUserID != 0 else { throw LifecycleStateError.rootUser }
+        try validateRootPath()
+        try validateNoSymlinkComponents(to: rootURL)
+        guard try metadataIfPresent(rootURL) != nil else { return }
+        try validateRoot()
+
+        let url = recordURL(forCanonicalHomePath: canonicalHomePath)
+        guard try metadataIfPresent(url) != nil else { return }
+        try validateRecordIfPresent(url)
+
+        let rootDescriptor = open(
+            rootURL.path,
+            O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+        )
+        guard rootDescriptor >= 0 else { throw fileSystemError(rootURL.path) }
+        defer { close(rootDescriptor) }
+        guard unlinkat(rootDescriptor, url.lastPathComponent, 0) == 0 else {
+            throw fileSystemError(url.path)
+        }
+        guard fsync(rootDescriptor) == 0 else { throw fileSystemError(rootURL.path) }
+    }
+
     func prepare() throws {
         guard effectiveUserID != 0 else { throw LifecycleStateError.rootUser }
         try prepareRoot()

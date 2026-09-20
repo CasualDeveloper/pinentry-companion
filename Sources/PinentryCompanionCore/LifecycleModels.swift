@@ -39,6 +39,7 @@ protocol LifecycleStatePersisting {
     func load(canonicalHomePath: String) throws -> LifecycleRecord?
     func loadAll() throws -> [LifecycleRecord]
     func save(_ record: LifecycleRecord) throws
+    func remove(canonicalHomePath: String) throws
 }
 
 protocol LifecycleLockHolding: AnyObject {}

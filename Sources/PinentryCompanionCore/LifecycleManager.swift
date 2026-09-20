@@ -136,6 +136,7 @@ final class LifecycleManager {
 
     private func setupLocked(_ request: LifecycleSetupRequest) throws -> LifecycleOperationResult {
         var existing = try state.load(canonicalHomePath: request.canonicalHomePath)
+        var stateBeforePreparation = existing
         var ownsCurrentConfiguration = false
 
         if var record = existing {
@@ -158,6 +159,7 @@ final class LifecycleManager {
                     finalPhase: .rolledBack
                 )
                 existing = record
+                stateBeforePreparation = record
             case .restorePrepared, .configRestored, .preferenceRestored:
                 _ = try recover(
                     &record,
@@ -166,6 +168,7 @@ final class LifecycleManager {
                     finalPhase: .complete
                 )
                 existing = record
+                stateBeforePreparation = record
                 if record.binary == request.binary { return .unchanged }
                 ownsCurrentConfiguration = true
             case .failed:
@@ -196,7 +199,7 @@ final class LifecycleManager {
             suitePreferenceBaseline: suitePreferenceBaseline
         )
         try state.save(record)
-        return try applySetup(record)
+        return try applySetup(record, restoringStateOnRejectedPreparation: stateBeforePreparation)
     }
 
     private func makeRecord(
@@ -261,13 +264,38 @@ final class LifecycleManager {
         return record
     }
 
-    private func applySetup(_ prepared: LifecycleRecord) throws -> LifecycleOperationResult {
+    private func applySetup(
+        _ prepared: LifecycleRecord,
+        restoringStateOnRejectedPreparation previousState: LifecycleRecord?
+    ) throws -> LifecycleOperationResult {
         var record = prepared
         let initial = try target.snapshot(
             canonicalHomePath: record.canonicalHomePath,
             configPath: record.configPath
         )
         let initialPreference = try preference.read()
+        do {
+            try require(
+                target: initial,
+                preference: initialPreference,
+                matchesTransactionBaseIn: record
+            )
+        } catch {
+            let primary = lifecycleError(error)
+            do {
+                if let previousState {
+                    try state.save(previousState)
+                } else {
+                    try state.remove(canonicalHomePath: record.canonicalHomePath)
+                }
+            } catch {
+                throw LifecycleError.rollbackFailed(
+                    primary: primary.description,
+                    rollback: lifecycleError(error).description
+                )
+            }
+            throw primary
+        }
         let reloadRequired = initial.config != record.expectedConfig || initialPreference != record.expectedPreference
 
         do {
@@ -530,6 +558,20 @@ final class LifecycleManager {
 
     private func requireCurrentState(matchesTransactionBaseIn record: LifecycleRecord) throws {
         try requireCurrentState(record, matches: .transactionBase)
+    }
+
+    private func require(
+        target: LifecycleTargetSnapshot,
+        preference: LifecyclePreferenceState,
+        matchesTransactionBaseIn record: LifecycleRecord
+    ) throws {
+        if target.home != record.transactionBaseHome { throw LifecycleError.drift("GNUPGHOME") }
+        if target.config != record.transactionBaseConfig {
+            throw LifecycleError.drift("gpg-agent.conf")
+        }
+        if preference != record.transactionBasePreference {
+            throw LifecycleError.drift("DisableKeychain")
+        }
     }
 
     private func require(
