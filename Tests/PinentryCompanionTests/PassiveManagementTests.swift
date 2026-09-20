@@ -8,7 +8,7 @@ final class PassiveManagementTests: XCTestCase {
         let envelope = PassiveStatusBuilder.build(snapshot: configuredSnapshot())
         let infoVersion = try PinentryInfo.value(for: "version")
 
-        XCTAssertEqual(ComponentVersion.current, "0.2.0")
+        XCTAssertEqual(ComponentVersion.current, "0.2.1")
         XCTAssertEqual(infoVersion, ComponentVersion.current)
         XCTAssertEqual(envelope.componentVersion, ComponentVersion.current)
     }

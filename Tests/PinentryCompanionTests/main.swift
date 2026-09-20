@@ -328,7 +328,7 @@ func testPinentryProtocolCheck() throws {
     OK Hi from pinentry-companion!
     D companion
     OK
-    D 0.2.0
+    D 0.2.1
     OK
     D 12345
     OK

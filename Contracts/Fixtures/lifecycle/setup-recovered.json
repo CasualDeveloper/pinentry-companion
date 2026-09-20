@@ -1,11 +1,17 @@
 {
-  "schemaVersion": true,
+  "schemaVersion": 1,
   "component": "pinentry-companion",
   "componentVersion": "0.2.1",
   "operation": "setup",
   "outcome": "ok",
   "changed": true,
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "lifecycle.setup.recovered",
+      "severity": "info",
+      "message": "An interrupted restore was recovered to the managed GPG configuration."
+    }
+  ],
   "state": {
     "transactionState": "committed",
     "safety": "exactRestoreStateRecorded"

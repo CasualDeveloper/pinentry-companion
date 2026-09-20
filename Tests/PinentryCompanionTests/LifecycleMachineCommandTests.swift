@@ -111,6 +111,10 @@ final class LifecycleMachineCommandTests: XCTestCase {
             XCTAssertEqual(envelope.state.transactionState, .committed)
             XCTAssertEqual(envelope.state.safety, .exactRestoreStateRecorded)
             XCTAssertEqual(envelope.diagnostics.map(\.code), [diagnosticCode])
+            let fixture = operationResult == .ownershipRecorded
+                ? "setup-ownership-recorded.json"
+                : "setup-recovered.json"
+            try assertJSON(result.data, matchesFixture: "lifecycle/\(fixture)")
         }
     }
 

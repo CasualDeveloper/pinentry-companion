@@ -33,12 +33,12 @@ automatically. Keep the candidate a draft until rolling compatibility and the
 tap gate are ready. This is a release boundary, not a runtime dependency on
 AuthCompanion or a local source checkout.
 
-After the preflight candidate passes, create and push the matching annotated tag, for example `v0.2.0`. The tag-triggered workflow tests the tagged source, verifies intrinsic version equality, packages arm64 and x86_64 archives, generates checksums and provenance attestations, and creates a **draft** GitHub release. It does not make the release public.
+After the preflight candidate passes, create and push the matching annotated tag, for example `v0.2.1`. The tag-triggered workflow tests the tagged source, verifies intrinsic version equality, packages arm64 and x86_64 archives, generates checksums and provenance attestations, and creates a **draft** GitHub release. It does not make the release public.
 
 Download the draft-release assets and run the verification and both disposable-machine Homebrew passes below against those exact archives. Once they pass and publication is explicitly approved, publish the existing draft without rebuilding it:
 
 ```sh
-gh release edit v0.2.0 --draft=false --repo CasualDeveloper/pinentry-companion
+gh release edit v0.2.1 --draft=false --repo CasualDeveloper/pinentry-companion
 ```
 
 Manual workflow runs build the branch or existing tag selected as the workflow run ref and only upload an expiring candidate artifact. They never create a tag or release. The single run ref is also the source identity recorded by GitHub's provenance attestation, so do not add a second checkout-ref input. The tag workflow creates a draft release only; publication is always a separate approval-controlled action.
@@ -55,15 +55,15 @@ Download both archives and `SHA256SUMS`, then verify:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-gh attestation verify pinentry-companion-v0.2.0-arm64.tar.gz --repo CasualDeveloper/pinentry-companion
-gh attestation verify pinentry-companion-v0.2.0-x86_64.tar.gz --repo CasualDeveloper/pinentry-companion
+gh attestation verify pinentry-companion-v0.2.1-arm64.tar.gz --repo CasualDeveloper/pinentry-companion
+gh attestation verify pinentry-companion-v0.2.1-x86_64.tar.gz --repo CasualDeveloper/pinentry-companion
 ```
 
 Extract each archive, verify the inner binary digest, ad hoc signature, hardened-runtime flag, intrinsic version, and non-interactive protocol before updating downstream package metadata. Do not use `spctl` as a success gate: these binaries do not have a Developer ID signature or notarization ticket.
 
 ```sh
-tar -xzf pinentry-companion-v0.2.0-arm64.tar.gz
-cd pinentry-companion-v0.2.0-arm64
+tar -xzf pinentry-companion-v0.2.1-arm64.tar.gz
+cd pinentry-companion-v0.2.1-arm64
 shasum -a 256 -c pinentry-companion.sha256
 codesign --verify --strict ./pinentry-companion
 codesign --display --verbose=4 ./pinentry-companion

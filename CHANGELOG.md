@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1 - Unreleased
+
+### Fixed
+
+- Reject configuration or preference changes detected after setup preparation,
+  preserving the external edit and restoring the previous lifecycle record.
+- Preserve an equivalent configured path when the plan reports no change.
+- Distinguish ownership-recording and interrupted-restore recovery from a true
+  no-op in lifecycle results.
+- Stop suggesting an uninstall retry that cannot alter an adopted baseline.
+
+The JSON schema remains v1. Keep this candidate unpublished until the compatible
+AuthCompanion bridge and tap guard are promoted.
+
 ## 0.2.0 - 2026-07-19
 
 ### Added

@@ -110,5 +110,6 @@ is not a test asset.
 Run the current tests and `python3 Scripts/validate-contracts.py` before
 candidate packaging. Follow [RELEASING.md](../RELEASING.md) for actual artifact
 and live gates. Keep new releases as drafts until the tap/coordinator
-compatibility gate in the shared plan is ready; the current coordinator
-accepts only pinentry 0.2.0.
+compatibility gate in the shared plan is ready. Published AuthCompanion 0.1.2
+accepts only pinentry 0.2.0; the candidate AuthCompanion 0.2.0 bridge accepts
+pinentry 0.2.0 and 0.2.1.
