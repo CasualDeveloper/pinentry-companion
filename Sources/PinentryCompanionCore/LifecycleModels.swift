@@ -50,6 +50,8 @@ protocol LifecycleLockProviding {
 
 enum LifecycleOperationResult: Equatable {
     case changed
+    case ownershipRecorded
+    case recovered
     case unchanged
     case restored
 }

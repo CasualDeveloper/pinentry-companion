@@ -138,6 +138,18 @@ enum LifecycleMachineCommand {
             changed = true
             code = "lifecycle.setup.applied"
             message = "GPG configuration was transactionally configured."
+        case (.setup, .ownershipRecorded):
+            transactionState = .committed
+            safety = .exactRestoreStateRecorded
+            changed = true
+            code = "lifecycle.setup.ownershipRecorded"
+            message = "Lifecycle ownership was recorded without changing GPG configuration."
+        case (.setup, .recovered):
+            transactionState = .committed
+            safety = .exactRestoreStateRecorded
+            changed = true
+            code = "lifecycle.setup.recovered"
+            message = "An interrupted restore was recovered to the managed GPG configuration."
         case (.setup, .unchanged):
             transactionState = .unchanged
             safety = .exactRestoreStateRecorded
@@ -162,7 +174,9 @@ enum LifecycleMachineCommand {
                 ? "lifecycle.restore.unchanged"
                 : "lifecycle.uninstall.alreadyPrepared"
             message = "Recorded original GPG configuration was already present."
-        case (.setup, .restored), (.restore, .changed), (.uninstall, .changed):
+        case (.setup, .restored),
+             (.restore, .changed), (.restore, .ownershipRecorded), (.restore, .recovered),
+             (.uninstall, .changed), (.uninstall, .ownershipRecorded), (.uninstall, .recovered):
             throw LifecycleMachineRuntimeError.unexpectedResult
         }
 
@@ -279,7 +293,7 @@ enum LifecycleMachineCommand {
             return conflict(
                 code: "lifecycle.uninstall.activeConfiguration",
                 message: "The recorded original configuration still invokes the binary being removed.",
-                remediation: "Configure a retained fallback pinentry, then retry uninstall preparation."
+                remediation: "Keep the formula installed; this adopted restore point cannot be made removal-safe by retrying."
             )
         case .incompleteTransaction:
             return conflict(

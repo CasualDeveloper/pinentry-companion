@@ -94,6 +94,26 @@ final class LifecycleMachineCommandTests: XCTestCase {
         try assertJSON(result.data, matchesFixture: "lifecycle/setup-unchanged.json")
     }
 
+    func testSetupReportsOwnershipAndRecoveryWritesAsCommittedChanges() throws {
+        for (operationResult, diagnosticCode) in [
+            (LifecycleOperationResult.ownershipRecorded, "lifecycle.setup.ownershipRecorded"),
+            (LifecycleOperationResult.recovered, "lifecycle.setup.recovered"),
+        ] {
+            let runner = RecordingLifecycleMachineRunner(result: operationResult)
+            let result = LifecycleMachineCommand.run(
+                arguments: ["setup", "--yes", "--format", "json"],
+                runner: runner
+            )
+            let envelope = try decode(result.data)
+
+            XCTAssertEqual(result.status, 0)
+            XCTAssertTrue(envelope.changed)
+            XCTAssertEqual(envelope.state.transactionState, .committed)
+            XCTAssertEqual(envelope.state.safety, .exactRestoreStateRecorded)
+            XCTAssertEqual(envelope.diagnostics.map(\.code), [diagnosticCode])
+        }
+    }
+
     func testRestoredResultMatchesRestoreAndUninstallGoldenFixtures() throws {
         let runner = RecordingLifecycleMachineRunner(result: .restored)
 

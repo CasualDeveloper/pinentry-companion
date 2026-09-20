@@ -169,7 +169,7 @@ final class LifecycleManager {
                 )
                 existing = record
                 stateBeforePreparation = record
-                if record.binary == request.binary { return .unchanged }
+                if record.binary == request.binary { return .recovered }
                 ownsCurrentConfiguration = true
             case .failed:
                 throw LifecycleError.incompleteTransaction(record.phase)
@@ -316,7 +316,9 @@ final class LifecycleManager {
             try save(&record, phase: .agentReloaded)
             try requireCurrentState(matchesExpectedIn: record)
             try save(&record, phase: .complete)
-            return initial.home == record.expectedHome && !reloadRequired ? .unchanged : .changed
+            return initial.home == record.expectedHome && !reloadRequired
+                ? .ownershipRecorded
+                : .changed
         } catch {
             let primary = lifecycleError(error)
             do {

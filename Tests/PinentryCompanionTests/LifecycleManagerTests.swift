@@ -199,7 +199,7 @@ final class LifecycleManagerTests: XCTestCase {
         fixture.target.config = fixture.expectedConfig
         fixture.preference.state = .boolean(true)
 
-        XCTAssertEqual(try fixture.manager.setup(fixture.request()), .unchanged)
+        XCTAssertEqual(try fixture.manager.setup(fixture.request()), .ownershipRecorded)
         XCTAssertEqual(fixture.state.current?.phase, .complete)
         XCTAssertEqual(
             try fixture.manager.previewRestore(canonicalHomePath: fixture.homePath),
@@ -219,7 +219,7 @@ final class LifecycleManagerTests: XCTestCase {
         fixture.target.config = fixture.expectedConfig
         fixture.preference.state = .boolean(true)
         let removingBinary = fixture.request().binary
-        XCTAssertEqual(try fixture.manager.setup(fixture.request()), .unchanged)
+        XCTAssertEqual(try fixture.manager.setup(fixture.request()), .ownershipRecorded)
         let saveCount = fixture.state.saveCallCount
 
         XCTAssertThrowsError(try fixture.manager.previewUninstallPreparation(
@@ -379,6 +379,20 @@ final class LifecycleManagerTests: XCTestCase {
         XCTAssertEqual(fixture.target.config, interrupted.originalConfig)
         XCTAssertEqual(fixture.preference.state, interrupted.originalPreference)
         XCTAssertEqual(fixture.state.current?.phase, .restored)
+    }
+
+    func testSetupReportsRecoveryOfAnInterruptedRestore() throws {
+        let fixture = Fixture()
+        _ = try fixture.manager.setup(fixture.request())
+        var interrupted = try XCTUnwrap(fixture.state.current)
+        interrupted.phase = .configRestored
+        fixture.state.records = [interrupted]
+        fixture.target.config = interrupted.originalConfig
+
+        XCTAssertEqual(try fixture.manager.setup(fixture.request()), .recovered)
+        XCTAssertEqual(fixture.target.config, interrupted.expectedConfig)
+        XCTAssertEqual(fixture.preference.state, interrupted.expectedPreference)
+        XCTAssertEqual(fixture.state.current?.phase, .complete)
     }
 
     func testManagedBinaryUpgradePreservesTheOriginalRestorePoint() throws {

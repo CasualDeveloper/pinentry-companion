@@ -166,6 +166,10 @@ extension CommandLineEntry {
                 printOutput("Configured: \(configURL.path)")
                 printOutput("Recorded reversible lifecycle state.")
                 printOutput("Reloaded gpg-agent.")
+            case .ownershipRecorded:
+                printOutput("Recorded reversible lifecycle state for the existing configuration.")
+            case .recovered:
+                printOutput("Recovered the interrupted restore and verified the managed configuration.")
             case .unchanged:
                 printOutput("Already configured and lifecycle state is current.")
             case .restored:
