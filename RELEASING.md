@@ -18,6 +18,21 @@ The release binary intentionally has no restricted Keychain entitlement and uses
 
 ## Draft and publish
 
+When implementing the [agent contract design](docs/design.md), ship its schemas,
+version-bound operator reference, and compatibility declaration with the exact
+candidate. Validate old and new machine contracts separately; do not add fields
+to strict v1 output. Use synthetic fixtures for automated authentication and
+recovery coverage, and reuse relevant live evidence while its inputs remain
+unchanged.
+
+The published AuthCompanion 0.1.2 accepts exactly pinentry 0.2.0. A compatible
+new schema does not bypass that product-version pin. Follow the
+[shared distribution plan](https://github.com/CasualDeveloper/AuthCompanion/blob/main/docs/plans/2026-09-16-agent-operability.md)
+before making a new release public: the tap's release-sync job can promote it
+automatically. Keep the candidate a draft until rolling compatibility and the
+tap gate are ready. This is a release boundary, not a runtime dependency on
+AuthCompanion or a local source checkout.
+
 After the preflight candidate passes, create and push the matching annotated tag, for example `v0.2.0`. The tag-triggered workflow tests the tagged source, verifies intrinsic version equality, packages arm64 and x86_64 archives, generates checksums and provenance attestations, and creates a **draft** GitHub release. It does not make the release public.
 
 Download the draft-release assets and run the verification and both disposable-machine Homebrew passes below against those exact archives. Once they pass and publication is explicitly approved, publish the existing draft without rebuilding it:
@@ -74,6 +89,6 @@ Run two separate passes from clean snapshots:
 1. **Fresh install:** capture whether `gpg-agent.conf` exists, its exact bytes and mode when present, and the presence/value of `org.gpgtools.common DisableKeychain`. Install the candidate formula, run `setup`, passive `doctor`, explicit `doctor auth`, and `setup` again to prove idempotence. Sign once through the fallback pinentry, kill `gpg-agent`, then sign again and authenticate with Touch ID or Apple Watch. Run `restore` and compare the captured file and preference state exactly. Run `setup` once more, then `uninstall --prepare`, compare the baseline again, and remove the formula.
 2. **Published upgrade:** restore the unmodified published formula, install the current release, run its `setup`, replace the formula with the candidate copy, and run `brew upgrade CasualDeveloper/tap/pinentry-companion`. Confirm the candidate version, passive `doctor`, explicit `doctor auth`, idempotent `setup`, and both signing paths still work.
 
-Releases before 0.2.0 did not create a lifecycle record covering both `gpg-agent.conf` and `DisableKeychain`. They could leave a timestamped configuration backup, but did not retain the prior preference state. The upgrade pass therefore verifies a safe functional migration, not reconstruction of state that the old release never saved. If a pre-0.2.0 configuration already points at `pinentry-companion`, the new lifecycle record adopts that configuration as its baseline; `uninstall --prepare` will correctly refuse to remove the binary until the user configures a retained fallback pinentry. Exact restore and one-command uninstall preparation are required in the fresh-install pass, where 0.2.0 owns the complete lifecycle.
+Releases before 0.2.0 did not create a lifecycle record covering both `gpg-agent.conf` and `DisableKeychain`. They could leave a timestamped configuration backup, but did not retain the prior preference state. The upgrade pass therefore verifies a safe functional migration, not reconstruction of state that the old release never saved. If a pre-0.2.0 configuration already points at `pinentry-companion`, the new lifecycle record adopts that configuration as its baseline; `uninstall --prepare` correctly refuses automatic removal because restoring that immutable baseline would still invoke the removed binary. Retrying after editing only the current configuration cannot change that baseline. Exact restore and one-command uninstall preparation are required in the fresh-install pass, where 0.2.0 owns the complete lifecycle.
 
 Do not publish the draft release or update the public tap formula until both passes succeed using those exact ad hoc-signed draft assets. After publication, replace the candidate `file://` URLs with the matching GitHub release URLs, retain `depends_on macos: :sonoma`, and update the formula test to assert both `pinentry-companion --version` and the `GETINFO version` response in addition to the flavor response. Rerun the strict formula audit and test before committing the tap update.

@@ -135,9 +135,9 @@ pinentry-companion uninstall --prepare
 brew uninstall pinentry-companion
 ```
 
-Uninstall preparation verifies that the restored configuration will not still invoke the binary being removed. If pinentry-companion was already the configured pinentry before lifecycle ownership was first recorded, preparation stops with a conflict; configure a retained fallback pinentry before retrying package removal.
+Uninstall preparation verifies that the restored configuration will not still invoke the binary being removed. If pinentry-companion was already configured before lifecycle ownership was first recorded, the recorded baseline still invokes that binary. Version 0.2.0 therefore refuses automatic uninstall preparation for the adopted installation. Retrying after editing only the current configuration cannot change the recorded baseline; keep the formula installed until a supported release workflow is available.
 
-This includes upgrades from releases before 0.2.0: those releases did not create a lifecycle record covering both the prior GPG configuration and `DisableKeychain` preference, so 0.2.0 cannot invent an exact pre-install restore point. The upgrade remains functional and future managed changes are transactional, but removing that adopted installation requires choosing a retained fallback pinentry first.
+This includes upgrades from releases before 0.2.0: those releases did not create a lifecycle record covering both the prior GPG configuration and `DisableKeychain` preference, so 0.2.0 cannot invent an exact pre-install restore point. The upgrade remains functional and future managed changes are transactional, but 0.2.0 cannot automatically prepare that adopted installation for removal.
 
 Cached passphrases deliberately survive configuration restore and package removal. If the user also wants those secrets deleted, purge them explicitly before uninstalling the binary:
 
@@ -187,6 +187,19 @@ pinentry-companion help          # show top-level help
 `status` and `plan` emit one JSON document and never write configuration, preferences, lifecycle state, or Keychain data; prompt for authentication; launch a fallback pinentry; or reload `gpg-agent`. They report lifecycle ownership, drift, recovery availability, dependency blockers, and whether a proposed change has or will create an exact restore record. Their Draft 2020-12 schemas and golden fixtures are checked in under `Contracts/`.
 
 The four lifecycle invocations shown above are the complete machine mutation surface. Their argument order is part of the contract: machine mode requires the literal `--yes`, never prompts, writes exactly one JSON document to stdout, and reports invocation errors without calling lifecycle adapters. Exit status `0` means the requested lifecycle operation completed, `1` means an operational error or state conflict, and `2` means invalid invocation. `setup` uses the same ownership-recorded transaction and rollback engine as the interactive command. `restore` and `uninstall --prepare` use the same compare-and-swap restoration engine; uninstall preparation does not remove the binary or delete cached passphrases. Review `plan` before requesting a mutation, and use `--take-over` only after explicitly accepting replacement of a foreign `pinentry-program` directive.
+
+## Agent integration and design
+
+The versioned commands above are the current automation interface. Inspect
+configuration alignment, lifecycle ownership, drift, and recovery together;
+`notProbed` authentication/cache fields are intentional. A successful signing
+operation alone does not prove fresh authentication because a key or agent
+cache may require no prompt.
+
+[Component design](docs/design.md) explains the proposed next contract and links
+to the shared system design and sequential implementation plan. Those extensions
+are not available in 0.2.0. AuthCompanion is an optional coordinator, not a
+dependency of this tool.
 
 ## Protocol Smoke Tests
 
