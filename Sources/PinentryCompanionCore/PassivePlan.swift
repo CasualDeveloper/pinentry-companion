@@ -55,7 +55,12 @@ enum PassivePlanBuilder {
                     beforeValues: configuration.values.map {
                         PrivatePathRedactor.display($0, homePath: snapshot.userHomePath)
                     },
-                    afterValue: PrivatePathRedactor.display(snapshot.invokedPath, homePath: snapshot.userHomePath),
+                    afterValue: PrivatePathRedactor.display(
+                        configuration.action == .none
+                            ? configuration.values.first ?? snapshot.invokedPath
+                            : snapshot.invokedPath,
+                        homePath: snapshot.userHomePath
+                    ),
                     requiresReload: reloadRequired,
                     reloadAvailable: snapshot.dependencyPaths["gpgconf"] != nil,
                     reversible: reversibility

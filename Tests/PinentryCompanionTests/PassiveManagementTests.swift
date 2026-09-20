@@ -39,6 +39,36 @@ final class PassiveManagementTests: XCTestCase {
         try assertJSON(PassivePlanBuilder.build(snapshot: configuredSnapshot()), matchesFixture: "plan/no-change.json")
     }
 
+    func testNoChangeDirectivePlanPreservesEquivalentConfiguredPath() throws {
+        let configuredPath = "/opt/homebrew/Cellar/pinentry-companion/0.2.0/bin/pinentry-companion"
+        let contents = "pinentry-program \(configuredPath)\n"
+
+        let plan = try GPGDirectivePlanner.plan(
+            contents: contents,
+            exists: true,
+            invokedPath: "/opt/homebrew/opt/pinentry-companion/bin/pinentry-companion",
+            resolvedPath: configuredPath,
+            allowTakeover: false
+        )
+
+        XCTAssertEqual(plan.action, .none)
+        XCTAssertEqual(plan.updatedContents, contents)
+    }
+
+    func testNoChangePlanReportsThePreservedEquivalentPath() {
+        var snapshot = configuredSnapshot()
+        let configuredPath = "/opt/homebrew/Cellar/pinentry-companion/0.2.0/bin/pinentry-companion"
+        snapshot.invokedPath = "/opt/homebrew/opt/pinentry-companion/bin/pinentry-companion"
+        snapshot.resolvedPath = configuredPath
+        snapshot.configContents = .readable("pinentry-program \(configuredPath)\n")
+
+        let envelope = PassivePlanBuilder.build(snapshot: snapshot)
+
+        XCTAssertEqual(envelope.state.gpgConfiguration.action, .none)
+        XCTAssertFalse(envelope.state.changeRequired)
+        XCTAssertEqual(envelope.state.gpgConfiguration.afterValue, configuredPath)
+    }
+
     func testCreatePlanMatchesGoldenFixture() throws {
         var snapshot = configuredSnapshot()
         snapshot.resolvedPath = "/opt/homebrew/bin/pinentry-companion"

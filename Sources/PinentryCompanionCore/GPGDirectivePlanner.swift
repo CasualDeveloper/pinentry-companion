@@ -50,7 +50,9 @@ enum GPGDirectivePlanner {
         return GPGDirectiveChange(
             action: action,
             beforeValues: values,
-            updatedContents: try GPGAgentConfig.updatedContents(contents, pinentryPath: invokedPath),
+            updatedContents: action == .none
+                ? contents
+                : try GPGAgentConfig.updatedContents(contents, pinentryPath: invokedPath),
             conflict: nil
         )
     }
